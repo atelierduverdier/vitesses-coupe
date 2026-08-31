@@ -145,6 +145,27 @@ réglages plus tard, la seconde à les poser dans un Job précis.
 > développement alors que la machine tourne sur la stable. L'appli fait donc
 > choisir, en montrant combien d'outils chacun contient, et retient la réponse.
 
+### Le jour où vous changerez de version de FreeCAD
+
+Le dossier de données de FreeCAD est **versionné** : `v1-1`, `v1-2`, `v26-3`…
+Une nouvelle version majeure repart d'un dossier **neuf**, et vos fraises n'y
+sont pas. Les vitesses, elles, restent — elles vivent dans
+`~/.config/vitesses-coupe/`, hors de FreeCAD.
+
+Rien n'est perdu, mais rien ne suit tout seul. Pour emporter la bibliothèque :
+
+```bash
+# adapter les deux versions
+cp -r ~/.local/share/FreeCAD/v1-1/CamAssets/Tools/Bit/*.fctb \
+      ~/.local/share/FreeCAD/v1-2/CamAssets/Tools/Bit/
+cp    ~/.local/share/FreeCAD/v1-1/CamAssets/Tools/Library/*.fctl \
+      ~/.local/share/FreeCAD/v1-2/CamAssets/Tools/Library/
+```
+
+Le lien avec les vitesses tient au **nom du fichier** `.fctb` : tant qu'il ne
+change pas, elles reviennent. Renommer un outil dans FreeCAD (son libellé) ne
+casse rien ; renommer son fichier, si.
+
 ## Raccourcis
 
 | | |
