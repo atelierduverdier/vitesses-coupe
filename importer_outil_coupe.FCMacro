@@ -167,7 +167,32 @@ def main():
             return
         job = jobs[j]
 
-    # --- 3. Créer la fraise, son contrôleur, poser les vitesses -----------
+    # --- 3. Dans quelle bibliothèque le ranger ? --------------------------
+    # Attacher l'outil au document suffit au Job, mais il n'apparaît alors
+    # PAS dans le Gestionnaire de bibliothèque : celui-ci lit les fichiers
+    # du magasin d'outils, pas les objets d'un document. Pour qu'il y soit,
+    # il faut l'enregistrer comme « asset » et l'inscrire dans une
+    # bibliothèque (.fctl). Relevé par Christophe le 31/08.
+    bibliotheques = []
+    try:
+        from Path.Tool.camassets import cam_assets
+        from Path.Tool.library import Library as BibliothequeOutils
+        for uri in cam_assets.list_assets(BibliothequeOutils.asset_type):
+            bibliotheques.append(cam_assets.get(uri, depth=1))
+    except Exception:                            # noqa: BLE001
+        bibliotheques = []                       # une version sans ce magasin
+
+    bibliotheque = None
+    if bibliotheques:
+        noms = ["%s  (%d outil(s))" % (b.label, len(b.get_bits()))
+                for b in bibliotheques] + ["— ne pas ranger en bibliothèque —"]
+        k = _choisir("Dans quelle bibliothèque d'outils ?", noms)
+        if k is None:
+            return
+        if k < len(bibliotheques):
+            bibliotheque = bibliotheques[k]
+
+    # --- 4. Créer la fraise, son contrôleur, poser les vitesses -----------
     doc.openTransaction("Importer " + outil.get('name', 'un outil'))
     try:
         import tempfile
@@ -179,8 +204,20 @@ def main():
         tampon = os.path.join(tempfile.gettempdir(), 'coupe_import.fctb')
         with open(tampon, 'w', encoding='utf-8') as f:
             json.dump(_fctb_depuis(outil), f, ensure_ascii=False, indent=2)
-        fraise = ToolBit.from_file(tampon).attach_to_doc(doc)
+        bit = ToolBit.from_file(tampon)
         os.unlink(tampon)
+
+        # Le ranger AVANT de l'attacher : la bibliothèque garde l'outil
+        # lui-même, le document n'en reçoit qu'une copie de travail.
+        range_dans = None
+        if bibliotheque is not None:
+            from Path.Tool.camassets import cam_assets
+            cam_assets.add(bit)
+            bibliotheque.add_bit(bit)
+            cam_assets.add(bibliotheque)
+            range_dans = bibliotheque.label
+
+        fraise = bit.attach_to_doc(doc)
         doc.recompute()
 
         numeros = [getattr(tc, 'ToolNumber', 0) for tc in job.Tools.Group]
@@ -224,6 +261,8 @@ def main():
 
     lignes = ["« %s » est dans %s." % (outil.get('name', 'L\'outil'), job.Label), "",
               "Outil n° %d :" % tc.ToolNumber]
+    if range_dans:
+        lignes.insert(1, "Rangé aussi dans la bibliothèque « %s »." % range_dans)
     for cle in ('Broche', 'Avance', 'Plongée'):
         if cle in pose:
             lignes.append("   %-18s %s" % (cle, pose[cle]))

@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "name": "3.17mm - Bois dur",
+  "shape": "endmill.fcstd",
+  "parameter": {
+    "Diameter": "3.175 mm",
+    "Flutes": 2,
+    "Chipload": "0.057 mm",
+    "CuttingEdgeHeight": "9.52 mm",
+    "Length": "25.40 mm",
+    "ShankDiameter": "3.175 mm",
+    "Material": "Carbide"
+  },
+  "attribute": {}
+}
