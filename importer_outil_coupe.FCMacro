@@ -1,0 +1,240 @@
+# -*- coding: utf-8 -*-
+# =========================================================================
+# importer_outil_coupe.FCMacro — un bouton pour l'atelier CAM
+# © Atelier du Verdier — licence LGPL-2.1-or-later (cf. LICENSE).
+# =========================================================================
+# Un clic, on choisit le fichier de l'appli « Vitesses de coupe », et
+# l'outil arrive DANS le Job : la fraise est créée, son Tool Controller
+# aussi, et les vitesses sont posées. Plus rien à recopier.
+#
+# INSTALLER LE BOUTON (une fois) :
+#   1. copier ce fichier dans le dossier des macros
+#      (~/.local/share/FreeCAD/Macro) ainsi que l'icône
+#      icone_outil_coupe.svg qui l'accompagne ;
+#   2. Outils → Personnaliser… → onglet « Macros » ;
+#   3. Macro : importer_outil_coupe.FCMacro
+#      Texte du menu : Importer un outil de coupe
+#      Info-bulle : Créer la fraise et son Tool Controller depuis l'appli
+#      Icône : parcourir jusqu'à icone_outil_coupe.svg
+#      → Ajouter ;
+#   4. onglet « Barres d'outils », atelier **CAM**, créer ou choisir une
+#      barre, y déplacer la nouvelle commande (flèche →), OK.
+#
+# Le bouton apparaît alors dans l'atelier CAM, et nulle part ailleurs.
+#
+# =========================================================================
+#  DEUX PIÈGES, MESURÉS SUR FreeCAD 1.1.3 LE 31/08/2026
+# =========================================================================
+# 1. LES UNITÉS. HorizFeed, VertFeed, HorizRapid et VertRapid sont des
+#    `App::PropertySpeed`, comptées en mm/s, quand l'interface affiche des
+#    mm/min. `tc.HorizFeed = 6300` ne lève aucune erreur et vaut
+#    378 000 mm/min — soixante fois trop. Seule la chaîne portant son
+#    unité est juste : `tc.HorizFeed = "6300 mm/min"`.
+#
+# 2. LES RAPIDES N'APPARTIENNENT PAS À L'OUTIL. Elles vivent dans le
+#    SetupSheet du Job, qui les RÉIMPOSE au Tool Controller à chaque
+#    recalcul : posées sur le contrôleur, elles retombent à zéro, avant
+#    comme après l'ajout au Job. Il faut les écrire sur `job.SetupSheet`.
+#    C'est d'ailleurs juste — un rapide dépend de la machine, pas de la
+#    fraise — mais rien ne le dit, et la valeur disparaît en silence.
+# =========================================================================
+
+import json
+import os
+
+import FreeCAD
+import FreeCADGui
+from PySide import QtGui
+
+TITRE = "Importer un outil de coupe"
+
+
+def _dire(texte, erreur=False):
+    boite = QtGui.QMessageBox.critical if erreur else QtGui.QMessageBox.information
+    boite(FreeCADGui.getMainWindow(), TITRE, texte)
+
+
+def _vitesse(objet, propriete, valeur_mm_min):
+    """Écrit une vitesse EN mm/min sur une propriété comptée en mm/s.
+
+    Le seul endroit de la macro où une vitesse est posée, pour qu'il n'y
+    ait qu'un seul endroit où se tromper. Voir le piège 1 en tête.
+    """
+    try:
+        v = float(valeur_mm_min)
+    except (TypeError, ValueError):
+        return None
+    if v <= 0:
+        return None
+    setattr(objet, propriete, "%f mm/min" % v)
+    return getattr(objet, propriete).getValueAs('mm/min')
+
+
+def _jobs(doc):
+    return [o for o in doc.Objects
+            if hasattr(o, 'Proxy') and hasattr(o, 'Tools') and hasattr(o, 'SetupSheet')]
+
+
+def _choisir(question, choix):
+    valeur, ok = QtGui.QInputDialog.getItem(
+        FreeCADGui.getMainWindow(), TITRE, question, choix, 0, False)
+    return choix.index(valeur) if ok else None
+
+
+def _fctb_depuis(outil):
+    """Le .fctb que FreeCAD attend, bâti depuis les données de l'appli.
+
+    Les longueurs ne sont pas dans l'appli — elle ne connaît que le
+    diamètre et le nombre de dents. On les déduit comme elle le fait dans
+    son propre export : hauteur de coupe 3 × Ø, longueur totale 8 × Ø.
+    Ce sont des ordres de grandeur d'usage, à corriger dans l'outil si la
+    fraise réelle en diffère.
+    """
+    d = float(str(outil.get('d', 6)).replace(',', '.'))
+    z = max(1, int(round(float(str(outil.get('z', 2)).replace(',', '.')))))
+    fz = str(outil.get('fz', 0)).replace(',', '.')
+    return {
+        "version": 2,
+        "name": outil.get('name', 'Outil'),
+        "shape": "endmill.fcstd",
+        "parameter": {
+            "Diameter": "%g mm" % d,
+            "Flutes": z,
+            "Chipload": "%s mm" % fz,
+            "CuttingEdgeHeight": "%.2f mm" % (d * 3),
+            "Length": "%.2f mm" % (d * 8),
+            "ShankDiameter": "%g mm" % d,
+            "Material": "Carbide",
+        },
+        "attribute": {},
+    }
+
+
+def main():
+    doc = FreeCAD.ActiveDocument
+    if doc is None:
+        _dire("Aucun document ouvert.", erreur=True)
+        return
+
+    jobs = _jobs(doc)
+    if not jobs:
+        _dire("Ce document ne contient aucun Job.\n\n"
+              "Dans l'atelier CAM : Job → créer, puis relancer.", erreur=True)
+        return
+
+    # --- 1. Le fichier de l'appli ----------------------------------------
+    depart = os.path.expanduser('~')
+    for essai in ('Téléchargements', 'Downloads'):
+        chemin_essai = os.path.join(depart, essai)
+        if os.path.isdir(chemin_essai):
+            depart = chemin_essai
+            break
+    chemin, _ = QtGui.QFileDialog.getOpenFileName(
+        FreeCADGui.getMainWindow(),
+        "Outil exporté par « Vitesses de coupe »",
+        os.path.join(depart, 'outils-vitesses-coupe.json'),
+        "Bibliothèque d'outils (*.json)")
+    if not chemin:
+        return
+    try:
+        with open(chemin, 'r', encoding='utf-8') as f:
+            donnees = json.load(f)
+    except (OSError, ValueError) as e:
+        _dire("Fichier illisible :\n%s" % e, erreur=True)
+        return
+
+    outils = donnees if isinstance(donnees, list) else [donnees]
+    outils = [o for o in outils if isinstance(o, dict) and o.get('n')]
+    if not outils:
+        _dire("Aucun outil exploitable dans ce fichier.\n\n"
+              "Attendu : l'export JSON de l'appli, pas un .fctb — celui-ci "
+              "décrit la fraise mais ne porte aucune vitesse.", erreur=True)
+        return
+
+    # --- 2. Quel outil, quel Job ------------------------------------------
+    i = _choisir("Quel outil importer ?",
+                 ["%s  —  %s tr/min, %s mm/min"
+                  % (o.get('name', 'sans nom'), o.get('n', '?'), o.get('vf', '?'))
+                  for o in outils])
+    if i is None:
+        return
+    outil = outils[i]
+
+    job = jobs[0]
+    if len(jobs) > 1:
+        j = _choisir("Dans quel Job ?", [x.Label for x in jobs])
+        if j is None:
+            return
+        job = jobs[j]
+
+    # --- 3. Créer la fraise, son contrôleur, poser les vitesses -----------
+    doc.openTransaction("Importer " + outil.get('name', 'un outil'))
+    try:
+        import tempfile
+        from Path.Tool.toolbit import ToolBit
+        from Path.Tool import Controller as ControleurOutil
+
+        # Le ToolBit se construit depuis un .fctb : on en écrit un, le temps
+        # de le lire. FreeCAD n'expose pas d'autre chemin aussi sûr.
+        tampon = os.path.join(tempfile.gettempdir(), 'coupe_import.fctb')
+        with open(tampon, 'w', encoding='utf-8') as f:
+            json.dump(_fctb_depuis(outil), f, ensure_ascii=False, indent=2)
+        fraise = ToolBit.from_file(tampon).attach_to_doc(doc)
+        os.unlink(tampon)
+        doc.recompute()
+
+        numeros = [getattr(tc, 'ToolNumber', 0) for tc in job.Tools.Group]
+        tc = ControleurOutil.Create("TC: " + outil.get('name', 'Outil'), tool=fraise)
+        job.Proxy.addToolController(tc)
+        tc.ToolNumber = (max(numeros) + 1) if numeros else 1
+
+        # Vitesses de COUPE : elles appartiennent à l'outil.
+        pose = {}
+        broche = float(outil.get('n') or 0)
+        if broche > 0:
+            tc.SpindleSpeed = broche
+            pose['Broche'] = "%.0f tr/min" % broche
+        for propriete, cle, etiquette in (('HorizFeed', 'vf', 'Avance'),
+                                          ('VertFeed', 'plunge', 'Plongée')):
+            obtenu = _vitesse(tc, propriete, outil.get(cle))
+            if obtenu is not None:
+                pose[etiquette] = "%.0f mm/min" % obtenu
+
+        # Vitesses de TRANSPORT : elles appartiennent à la MACHINE, donc au
+        # Job. Posées sur le contrôleur, elles seraient effacées au premier
+        # recalcul — voir le piège 2 en tête.
+        for propriete, cle, etiquette in (('HorizRapid', 'rapidH', 'Rapide horizontal'),
+                                          ('VertRapid', 'rapidV', 'Rapide vertical')):
+            obtenu = _vitesse(job.SetupSheet, propriete, outil.get(cle))
+            if obtenu is not None:
+                pose[etiquette] = "%.0f mm/min" % obtenu
+
+        doc.commitTransaction()
+    except Exception as e:                       # noqa: BLE001
+        doc.abortTransaction()
+        _dire("Rien n'a été modifié.\n\n%s : %s" % (type(e).__name__, e), erreur=True)
+        return
+
+    doc.recompute()
+    try:
+        FreeCADGui.Selection.clearSelection()
+        FreeCADGui.Selection.addSelection(tc)
+    except Exception:                            # noqa: BLE001
+        pass
+
+    lignes = ["« %s » est dans %s." % (outil.get('name', 'L\'outil'), job.Label), "",
+              "Outil n° %d :" % tc.ToolNumber]
+    for cle in ('Broche', 'Avance', 'Plongée'):
+        if cle in pose:
+            lignes.append("   %-18s %s" % (cle, pose[cle]))
+    rapides = [c for c in ('Rapide horizontal', 'Rapide vertical') if c in pose]
+    if rapides:
+        lignes += ["", "Sur le Job (ils valent pour tous les outils) :"]
+        for cle in rapides:
+            lignes.append("   %-18s %s" % (cle, pose[cle]))
+    lignes += ["", "La géométrie de la fraise (longueurs) est déduite du "
+                   "diamètre : à corriger dans l'outil si la vôtre en diffère."]
+    _dire("\n".join(lignes))
+
+
+main()

@@ -37,7 +37,9 @@ copeau en reprise de contour, les **réglages machine** repliés, une
 | `coupe_noyau.py` | les matières et les formules. Ni Qt ni web — la couche qu'on teste. |
 | `vitesses_coupe.py` | l'interface PySide6. |
 | `tests_noyau.py` | 38 contrôles sur le calcul : `python3 tests_noyau.py` |
-| `macro_tool_controller.py` | macro FreeCAD : remplit un Tool Controller depuis la bibliothèque exportée |
+| `importer_outil_coupe.FCMacro` | **le bouton de l'atelier CAM** : crée la fraise, son Tool Controller et pose les vitesses |
+| `icone_outil_coupe.svg` | l'icône de ce bouton |
+| `macro_tool_controller.py` | macro plus ancienne : remplit un Tool Controller **existant** |
 
 **Le noyau est partagé avec l'appli web du site**, qui en porte une
 traduction JavaScript ligne pour ligne. Les valeurs de référence des tests ne
@@ -53,20 +55,41 @@ ne peut pas porter de vitesses : celles-ci appartiennent au **Tool Controller**
 du Job, qui naît donc à zéro. Deux façons de le remplir :
 
 * **à la main** — l'appli affiche les cinq valeurs à recopier ;
-* **avec la macro** — `macro_tool_controller.py`, à copier dans le dossier des
-  macros FreeCAD. Elle lit la bibliothèque exportée, demande quel outil et quel
-  contrôleur, et pose les cinq valeurs.
+* **avec le bouton de l'atelier CAM** — `importer_outil_coupe.FCMacro`. Un clic,
+  on choisit le fichier, et l'outil arrive dans le Job : la fraise est créée,
+  son Tool Controller aussi, les vitesses sont posées. C'est la voie normale.
+* **avec l'ancienne macro** — `macro_tool_controller.py`, quand le contrôleur
+  existe déjà et qu'on veut seulement le remplir.
+
+### Poser le bouton dans l'atelier CAM (une fois)
+
+1. copier `importer_outil_coupe.FCMacro` **et** `icone_outil_coupe.svg` dans
+   le dossier des macros (`~/.local/share/FreeCAD/Macro`) ;
+2. **Outils → Personnaliser… → onglet Macros** : choisir la macro, lui donner
+   un texte de menu (« Importer un outil de coupe »), désigner l'icône, puis
+   **Ajouter** ;
+3. **onglet Barres d'outils**, atelier **CAM**, créer ou choisir une barre et y
+   déplacer la commande avec la flèche →.
+
+Le bouton n'apparaît alors que dans l'atelier CAM.
 
 Le fichier qu'elle attend s'obtient par **Export JSON…**, sous la bibliothèque
 (l'appli web a le même bouton dans son panneau « Exporter »). C'est bien ce
 fichier-là qu'il faut, pas le `.fctb` : le `.fctb` décrit la fraise, le JSON
 porte les vitesses.
 
-> **Le piège que la macro évite.** Les propriétés `HorizFeed`, `VertFeed`,
-> `HorizRapid` et `VertRapid` sont stockées en **mm/s** alors que l'interface
-> affiche des mm/min. Écrire `tc.HorizFeed = 6300` ne lève aucune erreur et
-> donne **378 000 mm/min** — soixante fois trop. Seule la forme
-> `tc.HorizFeed = "6300 mm/min"` est juste. Mesuré sur FreeCAD 1.1.3.
+> **Deux pièges que le bouton évite**, mesurés sur FreeCAD 1.1.3.
+>
+> **Les unités.** `HorizFeed`, `VertFeed`, `HorizRapid` et `VertRapid` sont
+> comptées en **mm/s** alors que l'interface affiche des mm/min. Écrire
+> `tc.HorizFeed = 6300` ne lève aucune erreur et donne **378 000 mm/min** —
+> soixante fois trop. Seule la forme `tc.HorizFeed = "6300 mm/min"` est juste.
+>
+> **Les rapides n'appartiennent pas à l'outil.** Elles vivent dans le
+> `SetupSheet` du Job, qui les réimpose au Tool Controller à chaque recalcul :
+> posées sur le contrôleur elles retombent à zéro, avant comme après l'ajout au
+> Job. C'est cohérent — un rapide dépend de la machine, pas de la fraise — mais
+> rien ne le signale et la valeur disparaît en silence.
 
 Les deux **rapides** ne sortent pas du calcul : ce sont des vitesses de
 transport, propres à la machine. Elles se règlent dans le panneau « Machine »

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Icone du bouton « Importer un outil de coupe », atelier CAM.
+     Charte de la maison : orange #ff8a00, ardoise #2f3540. Une fraise
+     deux dents vue de cote, avec la fleche d'import qui entre dedans. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Importer un outil de coupe</title>
+  <!-- queue de la fraise -->
+  <rect x="26" y="6" width="12" height="20" rx="2" fill="#2f3540"/>
+  <!-- corps -->
+  <rect x="24" y="24" width="16" height="26" rx="1.5" fill="#ff8a00"/>
+  <!-- helices -->
+  <g stroke="#2f3540" stroke-width="2.4" stroke-linecap="round" fill="none">
+    <path d="M24 30 L40 38"/>
+    <path d="M24 40 L40 48"/>
+  </g>
+  <!-- pointe -->
+  <path d="M24 50 L32 58 L40 50 Z" fill="#2f3540"/>
+  <!-- fleche d'import, vers la fraise -->
+  <g stroke="#2f3540" stroke-width="4" stroke-linecap="round" fill="none">
+    <path d="M8 40 L8 54"/>
+  </g>
+  <path d="M2.5 48 L8 56 L13.5 48 Z" fill="#ff8a00" stroke="#2f3540"
+        stroke-width="1.6" stroke-linejoin="round"/>
+</svg>
