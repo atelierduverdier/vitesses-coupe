@@ -37,6 +37,8 @@ copeau en reprise de contour, les **réglages machine** repliés, une
 | `coupe_noyau.py` | les matières et les formules. Ni Qt ni web — la couche qu'on teste. |
 | `vitesses_coupe.py` | l'interface PySide6. |
 | `tests_noyau.py` | 38 contrôles sur le calcul : `python3 tests_noyau.py` |
+| `carnet_noyau.py` | **le carnet d'essais** : la théorie calcule, le carnet retient ce que la matière a répondu. Ni Qt ni web. |
+| `tests_carnet.py` | les contrôles du carnet : `python3 tests_carnet.py` |
 | `importer_outil_coupe.FCMacro` | **le bouton de l'atelier CAM** : crée la fraise, son Tool Controller et pose les vitesses |
 | `icone_outil_coupe.svg` | l'icône de ce bouton |
 | `macro_tool_controller.py` | macro plus ancienne : remplit un Tool Controller **existant** |
@@ -191,6 +193,25 @@ Et l'avance calculée n'est pas toujours tenable : une PrintNC décroche
 au-delà de 600 à 800 mm/min dans les courbes. C'est à ça que sert le champ
 **Avance max** — l'appli avertit alors et propose la broche qui garde le
 copeau sous ce plafond.
+
+## Le carnet d'essais
+
+La section précédente le dit : les valeurs sont des points de départ, le vrai
+juge est le copeau. Le carnet est l'endroit où ce jugement s'écrit — le
+pendant fraiseuse du nuancier laser.
+
+Un essai retient la matière telle qu'elle était (« chêne de récup »), la
+fraise, les vitesses réellement tenues, une photo du résultat et un **verdict
+court** (« propre », « ça brûle »). Avant un nouveau travail, on consulte :
+`chercher()` rend les essais de la matière, du Ø le plus proche au plus
+lointain et du plus récent au plus ancien, et `comparer_theorie()` situe
+chaque essai face au calcul — le **rapport de copeau** surtout : 0,13, c'est
+la fraise qui frottait.
+
+Pour l'instant seul le cœur existe (`carnet_noyau.py`) ; l'interface viendra.
+Le carnet vit **hors du dépôt**, avec les affaires de la machine :
+`~/Projets/machine/carnet-essais/` — un `carnet.json` lisible, qui n'est
+jamais écrasé s'il est abîmé, et les photos à côté, nommées comme les essais.
 
 ## Licence
 
