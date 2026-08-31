@@ -1,2 +1,8 @@
 __pycache__/
 *.pyc
+
+# Les fichiers d.outils sont des SORTIES de l.appli, pas des sources :
+# un « git add -A » les a avales une fois, ils ne doivent pas revenir.
+*.fctb
+*.fctl
+outils-vitesses-coupe.json
