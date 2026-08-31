@@ -3,44 +3,46 @@
 # importer_outil_coupe.FCMacro — un bouton pour l'atelier CAM
 # © Atelier du Verdier — licence LGPL-2.1-or-later (cf. LICENSE).
 # =========================================================================
-# Un clic, on choisit le fichier de l'appli « Vitesses de coupe », et
-# l'outil arrive DANS le Job : la fraise est créée, son Tool Controller
-# aussi, et les vitesses sont posées. Plus rien à recopier.
+# Un clic : on choisit une fraise DANS SA BIBLIOTHÈQUE, et elle arrive dans
+# le Job avec son Tool Controller et ses vitesses.
+#
+# La macro ne CRÉE plus d'outil. Elle partait auparavant d'un fichier JSON
+# exporté par l'appli et fabriquait une fraise à partir de lui — mais
+# l'appli sait déjà écrire dans la bibliothèque FreeCAD, si bien qu'on se
+# retrouvait avec la MÊME fraise deux fois : celle de l'appli, complète, et
+# celle de la macro, à la géométrie déduite. Relevé par Christophe le
+# 31/08/2026, capture à l'appui : six entrées pour cinq fraises.
+#
+# Le parcours tient donc en deux gestes :
+#   1. dans l'appli : régler la fraise, puis « ↑ Écrire dans FreeCAD… » ;
+#   2. ici : ce bouton, qui la pose dans le Job avec ses vitesses.
 #
 # INSTALLER LE BOUTON (une fois) :
-#   1. copier ce fichier dans le dossier des macros
-#      (~/.local/share/FreeCAD/v1-1/Macro) ainsi que l'icône
-#      icone_outil_coupe.svg qui l'accompagne ;
-#   2. Outils → Personnaliser… → onglet « Macros » ;
-#   3. Macro : importer_outil_coupe.FCMacro
-#      Texte du menu : Importer un outil de coupe
-#      Info-bulle : Créer la fraise et son Tool Controller depuis l'appli
-#      Icône : parcourir jusqu'à icone_outil_coupe.svg
-#      → Ajouter ;
-#   4. onglet « Barres d'outils », atelier **CAM**, créer ou choisir une
-#      barre, y déplacer la nouvelle commande (flèche →), OK.
-#
-# Le bouton apparaît alors dans l'atelier CAM, et nulle part ailleurs.
+#   1. copier ce fichier et icone_outil_coupe.svg dans le dossier des
+#      macros — il est VERSIONNÉ (FreeCAD 1.1 :
+#      ~/.local/share/FreeCAD/v1-1/Macro). En cas de doute, la réponse vient
+#      de FreeCAD lui-même : FreeCAD.getUserMacroDir(True) ;
+#   2. Outils → Personnaliser… → onglet « Macros » : texte du menu
+#      « Importer un outil de coupe », icône, puis Ajouter ;
+#   3. onglet « Barres d'outils », atelier CAM, y déplacer la commande.
 #
 # =========================================================================
-#  DEUX PIÈGES, MESURÉS SUR FreeCAD 1.1.3 LE 31/08/2026
+#  DEUX PIÈGES, MESURÉS SUR FreeCAD 1.1.3
 # =========================================================================
-# 1. LES UNITÉS. HorizFeed, VertFeed, HorizRapid et VertRapid sont des
-#    `App::PropertySpeed`, comptées en mm/s, quand l'interface affiche des
-#    mm/min. `tc.HorizFeed = 6300` ne lève aucune erreur et vaut
-#    378 000 mm/min — soixante fois trop. Seule la chaîne portant son
-#    unité est juste : `tc.HorizFeed = "6300 mm/min"`.
+# 1. LES UNITÉS. HorizFeed, VertFeed, HorizRapid et VertRapid sont comptées
+#    en mm/s quand l'interface affiche des mm/min. `tc.HorizFeed = 6300` ne
+#    lève aucune erreur et vaut 378 000 mm/min — soixante fois trop. Seule
+#    la chaîne portant son unité est juste : `"6300 mm/min"`.
 #
 # 2. LES RAPIDES N'APPARTIENNENT PAS À L'OUTIL. Elles vivent dans le
 #    SetupSheet du Job, qui les RÉIMPOSE au Tool Controller à chaque
-#    recalcul : posées sur le contrôleur, elles retombent à zéro, avant
-#    comme après l'ajout au Job. Il faut les écrire sur `job.SetupSheet`.
-#    C'est d'ailleurs juste — un rapide dépend de la machine, pas de la
-#    fraise — mais rien ne le dit, et la valeur disparaît en silence.
+#    recalcul : posées sur le contrôleur, elles retombent à zéro sans le
+#    moindre message. C'est juste — un rapide dépend de la machine, pas de
+#    la fraise — mais rien ne le dit.
 # =========================================================================
 
 import json
-import os
+from pathlib import Path
 
 import FreeCAD
 import FreeCADGui
@@ -48,10 +50,28 @@ from PySide import QtGui
 
 TITRE = "Importer un outil de coupe"
 
+# Là où l'appli garde les vitesses. Un fichier d'outil FreeCAD ne peut pas
+# les porter : le format a bien un champ libre, mais FreeCAD le VIDE dès
+# qu'il réécrit l'outil.
+VITESSES = Path.home() / '.config' / 'vitesses-coupe' / 'vitesses-freecad.json'
+
 
 def _dire(texte, erreur=False):
     boite = QtGui.QMessageBox.critical if erreur else QtGui.QMessageBox.information
     boite(FreeCADGui.getMainWindow(), TITRE, texte)
+
+
+def _choisir(question, choix):
+    valeur, ok = QtGui.QInputDialog.getItem(
+        FreeCADGui.getMainWindow(), TITRE, question, choix, 0, False)
+    return choix.index(valeur) if ok else None
+
+
+def _lire_json(chemin):
+    try:
+        return json.loads(Path(chemin).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
 
 
 def _vitesse(objet, propriete, valeur_mm_min):
@@ -70,44 +90,30 @@ def _vitesse(objet, propriete, valeur_mm_min):
     return getattr(objet, propriete).getValueAs('mm/min')
 
 
+def _dossier_outils():
+    """Le magasin d'outils de CETTE installation de FreeCAD.
+
+    On le demande à FreeCAD plutôt que de le deviner : le dossier de
+    données est versionné (v1-1, v1-2, v26-3…) et plusieurs versions
+    cohabitent presque toujours.
+    """
+    base = Path(FreeCAD.getUserAppDataDir()) / 'CamAssets' / 'Tools'
+    return base if (base / 'Library').is_dir() else None
+
+
+def _bibliotheques(dossier):
+    listes = []
+    for fctl in sorted((dossier / 'Library').glob('*.fctl')):
+        d = _lire_json(fctl)
+        if d:
+            listes.append({'label': d.get('label') or fctl.stem,
+                           'outils': d.get('tools') or []})
+    return listes
+
+
 def _jobs(doc):
     return [o for o in doc.Objects
             if hasattr(o, 'Proxy') and hasattr(o, 'Tools') and hasattr(o, 'SetupSheet')]
-
-
-def _choisir(question, choix):
-    valeur, ok = QtGui.QInputDialog.getItem(
-        FreeCADGui.getMainWindow(), TITRE, question, choix, 0, False)
-    return choix.index(valeur) if ok else None
-
-
-def _fctb_depuis(outil):
-    """Le .fctb que FreeCAD attend, bâti depuis les données de l'appli.
-
-    Les longueurs ne sont pas dans l'appli — elle ne connaît que le
-    diamètre et le nombre de dents. On les déduit comme elle le fait dans
-    son propre export : hauteur de coupe 3 × Ø, longueur totale 8 × Ø.
-    Ce sont des ordres de grandeur d'usage, à corriger dans l'outil si la
-    fraise réelle en diffère.
-    """
-    d = float(str(outil.get('d', 6)).replace(',', '.'))
-    z = max(1, int(round(float(str(outil.get('z', 2)).replace(',', '.')))))
-    fz = str(outil.get('fz', 0)).replace(',', '.')
-    return {
-        "version": 2,
-        "name": outil.get('name', 'Outil'),
-        "shape": "endmill.fcstd",
-        "parameter": {
-            "Diameter": "%g mm" % d,
-            "Flutes": z,
-            "Chipload": "%s mm" % fz,
-            "CuttingEdgeHeight": "%.2f mm" % (d * 3),
-            "Length": "%.2f mm" % (d * 8),
-            "ShankDiameter": "%g mm" % d,
-            "Material": "Carbide",
-        },
-        "attribute": {},
-    }
 
 
 def main():
@@ -122,43 +128,56 @@ def main():
               "Dans l'atelier CAM : Job → créer, puis relancer.", erreur=True)
         return
 
-    # --- 1. Le fichier de l'appli ----------------------------------------
-    depart = os.path.expanduser('~')
-    for essai in ('Téléchargements', 'Downloads'):
-        chemin_essai = os.path.join(depart, essai)
-        if os.path.isdir(chemin_essai):
-            depart = chemin_essai
-            break
-    chemin, _ = QtGui.QFileDialog.getOpenFileName(
-        FreeCADGui.getMainWindow(),
-        "Outil exporté par « Vitesses de coupe »",
-        os.path.join(depart, 'outils-vitesses-coupe.json'),
-        "Bibliothèque d'outils (*.json)")
-    if not chemin:
-        return
-    try:
-        with open(chemin, 'r', encoding='utf-8') as f:
-            donnees = json.load(f)
-    except (OSError, ValueError) as e:
-        _dire("Fichier illisible :\n%s" % e, erreur=True)
+    dossier = _dossier_outils()
+    if dossier is None:
+        _dire("Aucune bibliothèque d'outils dans cette installation de FreeCAD.",
+              erreur=True)
         return
 
-    outils = donnees if isinstance(donnees, list) else [donnees]
-    outils = [o for o in outils if isinstance(o, dict) and o.get('n')]
-    if not outils:
-        _dire("Aucun outil exploitable dans ce fichier.\n\n"
-              "Attendu : l'export JSON de l'appli, pas un .fctb — celui-ci "
-              "décrit la fraise mais ne porte aucune vitesse.", erreur=True)
+    # --- 1. Quelle fraise, dans quelle bibliothèque ? ---------------------
+    libs = [b for b in _bibliotheques(dossier) if b['outils']]
+    if not libs:
+        _dire("Aucune bibliothèque d'outils garnie.\n\n"
+              "Dans l'appli « Vitesses de coupe » : régler la fraise puis "
+              "« ↑ Écrire dans FreeCAD… ».", erreur=True)
         return
 
-    # --- 2. Quel outil, quel Job ------------------------------------------
-    i = _choisir("Quel outil importer ?",
-                 ["%s  —  %s tr/min, %s mm/min"
-                  % (o.get('name', 'sans nom'), o.get('n', '?'), o.get('vf', '?'))
-                  for o in outils])
+    if len(libs) == 1:
+        lib = libs[0]
+    else:
+        i = _choisir("Quelle bibliothèque ?",
+                     ["%s  (%d outils)" % (b['label'], len(b['outils'])) for b in libs])
+        if i is None:
+            return
+        lib = libs[i]
+
+    vitesses_connues = _lire_json(VITESSES) or {}
+    entrees = []
+    for e in lib['outils']:
+        chemin = dossier / 'Bit' / str(e.get('path', ''))
+        d = _lire_json(chemin)
+        if not d:
+            continue
+        entrees.append({'chemin': chemin, 'nom': d.get('name') or chemin.stem,
+                        'nr': e.get('nr'),
+                        'vitesses': vitesses_connues.get(chemin.name) or {},
+                        'diametre': (d.get('parameter') or {}).get('Diameter', '?')})
+    if not entrees:
+        _dire("Cette bibliothèque ne contient aucun fichier d'outil lisible.",
+              erreur=True)
+        return
+
+    etiquettes = []
+    for e in entrees:
+        v = e['vitesses']
+        etiquettes.append(
+            "%s  —  %s%s" % (e['nom'], e['diametre'],
+                             ("  ·  %s tr/min, %s mm/min" % (v.get('n'), v.get('vf')))
+                             if v.get('n') else "  ·  vitesses inconnues"))
+    i = _choisir("Quelle fraise poser dans le Job ?", etiquettes)
     if i is None:
         return
-    outil = outils[i]
+    outil = entrees[i]
 
     job = jobs[0]
     if len(jobs) > 1:
@@ -167,85 +186,38 @@ def main():
             return
         job = jobs[j]
 
-    # --- 3. Dans quelle bibliothèque le ranger ? --------------------------
-    # Attacher l'outil au document suffit au Job, mais il n'apparaît alors
-    # PAS dans le Gestionnaire de bibliothèque : celui-ci lit les fichiers
-    # du magasin d'outils, pas les objets d'un document. Pour qu'il y soit,
-    # il faut l'enregistrer comme « asset » et l'inscrire dans une
-    # bibliothèque (.fctl). Relevé par Christophe le 31/08.
-    bibliotheques = []
+    # --- 2. La poser dans le Job -----------------------------------------
+    doc.openTransaction("Importer " + outil['nom'])
     try:
-        from Path.Tool.camassets import cam_assets
-        from Path.Tool.library import Library as BibliothequeOutils
-        for uri in cam_assets.list_assets(BibliothequeOutils.asset_type):
-            bibliotheques.append(cam_assets.get(uri, depth=1))
-    except Exception:                            # noqa: BLE001
-        bibliotheques = []                       # une version sans ce magasin
-
-    bibliotheque = None
-    if bibliotheques:
-        noms = ["%s  (%d outil(s))" % (b.label, len(b.get_bits()))
-                for b in bibliotheques] + ["— ne pas ranger en bibliothèque —"]
-        k = _choisir("Dans quelle bibliothèque d'outils ?", noms)
-        if k is None:
-            return
-        if k < len(bibliotheques):
-            bibliotheque = bibliotheques[k]
-
-    # --- 4. Créer la fraise, son contrôleur, poser les vitesses -----------
-    doc.openTransaction("Importer " + outil.get('name', 'un outil'))
-    try:
-        import tempfile
         from Path.Tool.toolbit import ToolBit
         from Path.Tool import Controller as ControleurOutil
 
-        # Le ToolBit se construit depuis un .fctb : on en écrit un, le temps
-        # de le lire. FreeCAD n'expose pas d'autre chemin aussi sûr.
-        tampon = os.path.join(tempfile.gettempdir(), 'coupe_import.fctb')
-        with open(tampon, 'w', encoding='utf-8') as f:
-            json.dump(_fctb_depuis(outil), f, ensure_ascii=False, indent=2)
-        bit = ToolBit.from_file(tampon)
-        os.unlink(tampon)
-
-        # Le ranger AVANT de l'attacher : la bibliothèque garde l'outil
-        # lui-même, le document n'en reçoit qu'une copie de travail.
-        range_dans = None
-        if bibliotheque is not None:
-            from Path.Tool.camassets import cam_assets
-            cam_assets.add(bit)
-            bibliotheque.add_bit(bit)
-            cam_assets.add(bibliotheque)
-            range_dans = bibliotheque.label
-
-        fraise = bit.attach_to_doc(doc)
+        # On lit le fichier DÉJÀ dans la bibliothèque : aucune fraise n'est
+        # créée, donc aucun doublon possible.
+        fraise = ToolBit.from_file(str(outil['chemin'])).attach_to_doc(doc)
         doc.recompute()
 
         numeros = [getattr(tc, 'ToolNumber', 0) for tc in job.Tools.Group]
-        tc = ControleurOutil.Create("TC: " + outil.get('name', 'Outil'), tool=fraise)
+        tc = ControleurOutil.Create("TC: " + outil['nom'], tool=fraise)
         job.Proxy.addToolController(tc)
-        tc.ToolNumber = (max(numeros) + 1) if numeros else 1
+        tc.ToolNumber = outil['nr'] or ((max(numeros) + 1) if numeros else 1)
 
-        # Vitesses de COUPE : elles appartiennent à l'outil.
+        v = outil['vitesses']
         pose = {}
-        broche = float(outil.get('n') or 0)
-        if broche > 0:
-            tc.SpindleSpeed = broche
-            pose['Broche'] = "%.0f tr/min" % broche
+        if v.get('n'):
+            tc.SpindleSpeed = float(v['n'])
+            pose['Broche'] = "%.0f tr/min" % float(v['n'])
         for propriete, cle, etiquette in (('HorizFeed', 'vf', 'Avance'),
                                           ('VertFeed', 'plunge', 'Plongée')):
-            obtenu = _vitesse(tc, propriete, outil.get(cle))
+            obtenu = _vitesse(tc, propriete, v.get(cle))
             if obtenu is not None:
                 pose[etiquette] = "%.0f mm/min" % obtenu
-
-        # Vitesses de TRANSPORT : elles appartiennent à la MACHINE, donc au
-        # Job. Posées sur le contrôleur, elles seraient effacées au premier
-        # recalcul — voir le piège 2 en tête.
+        # Les rapides vont sur le JOB — voir le piège 2 en tête.
         for propriete, cle, etiquette in (('HorizRapid', 'rapidH', 'Rapide horizontal'),
                                           ('VertRapid', 'rapidV', 'Rapide vertical')):
-            obtenu = _vitesse(job.SetupSheet, propriete, outil.get(cle))
+            obtenu = _vitesse(job.SetupSheet, propriete, v.get(cle))
             if obtenu is not None:
                 pose[etiquette] = "%.0f mm/min" % obtenu
-
         doc.commitTransaction()
     except Exception as e:                       # noqa: BLE001
         doc.abortTransaction()
@@ -259,20 +231,22 @@ def main():
     except Exception:                            # noqa: BLE001
         pass
 
-    lignes = ["« %s » est dans %s." % (outil.get('name', 'L\'outil'), job.Label), "",
-              "Outil n° %d :" % tc.ToolNumber]
-    if range_dans:
-        lignes.insert(1, "Rangé aussi dans la bibliothèque « %s »." % range_dans)
-    for cle in ('Broche', 'Avance', 'Plongée'):
-        if cle in pose:
-            lignes.append("   %-18s %s" % (cle, pose[cle]))
-    rapides = [c for c in ('Rapide horizontal', 'Rapide vertical') if c in pose]
-    if rapides:
-        lignes += ["", "Sur le Job (ils valent pour tous les outils) :"]
-        for cle in rapides:
-            lignes.append("   %-18s %s" % (cle, pose[cle]))
-    lignes += ["", "La géométrie de la fraise (longueurs) est déduite du "
-                   "diamètre : à corriger dans l'outil si la vôtre en diffère."]
+    lignes = ["« %s » est dans %s, outil n° %d."
+              % (outil['nom'], job.Label, tc.ToolNumber), ""]
+    if pose:
+        for cle in ('Broche', 'Avance', 'Plongée'):
+            if cle in pose:
+                lignes.append("   %-18s %s" % (cle, pose[cle]))
+        rapides = [c for c in ('Rapide horizontal', 'Rapide vertical') if c in pose]
+        if rapides:
+            lignes += ["", "Sur le Job (ils valent pour tous les outils) :"]
+            for cle in rapides:
+                lignes.append("   %-18s %s" % (cle, pose[cle]))
+    else:
+        lignes += ["Aucune vitesse connue pour cette fraise.", "",
+                   "Dans l'appli « Vitesses de coupe » : la régler, puis",
+                   "« ↑ Écrire dans FreeCAD… ». Elles seront retenues et",
+                   "reviendront ici au prochain passage."]
     _dire("\n".join(lignes))
 
 

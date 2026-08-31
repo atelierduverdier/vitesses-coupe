@@ -57,15 +57,13 @@ du Job, qui naît donc à zéro. Deux façons de le remplir :
 
 * **à la main** — l'appli affiche les cinq valeurs à recopier ;
 * **avec le bouton de l'atelier CAM** — `importer_outil_coupe.FCMacro`. Un clic,
-  on choisit le fichier et la bibliothèque, et l'outil arrive : rangé dans la
-  bibliothèque d'outils (il apparaît alors dans le Gestionnaire de bibliothèque),
-  créé dans le Job avec son Tool Controller, vitesses posées. C'est la voie
-  normale.
+  on choisit une fraise **dans sa bibliothèque**, et elle arrive dans le Job avec
+  son Tool Controller et ses vitesses. C'est la voie normale.
 
-  > Attacher un outil au document ne suffit PAS à le faire apparaître dans le
-  > Gestionnaire de bibliothèque : celui-ci lit le magasin d'outils (les `.fctb`
-  > et les `.fctl` de `CamAssets/Tools`), pas les objets d'un document. Il faut
-  > l'enregistrer comme *asset* puis l'inscrire dans une bibliothèque.
+  > Le bouton ne CRÉE pas d'outil, il pioche dans la bibliothèque. C'est l'appli
+  > qui y écrit, par « ↑ Écrire dans FreeCAD… ». Faire les deux mènerait à la
+  > **même fraise en double** — celle de l'appli, complète, et celle de la macro,
+  > à la géométrie déduite. C'est arrivé le 31/08 : six entrées pour cinq fraises.
 * **avec l'ancienne macro** — `macro_tool_controller.py`, quand le contrôleur
   existe déjà et qu'on veut seulement le remplir.
 
