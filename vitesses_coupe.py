@@ -869,13 +869,21 @@ class Fenetre(QMainWindow):
                          "retenues."))
 
     def _exporter_freecad(self):
-        """Écrire l'outil courant dans une bibliothèque FreeCAD."""
+        """Écrire l'outil dans une bibliothèque FreeCAD.
+
+        Si aucun outil n'est choisi dans la liste, c'est celui qui est à
+        l'écran qu'on écrit — et il est enregistré au passage. Demander
+        deux gestes pour une seule intention n'apprend rien à personne.
+        """
         it = self.liste.currentItem()
         if it is None:
-            QMessageBox.information(self, APP_NOM,
-                                    "Choisir d'abord un outil dans la bibliothèque.")
-            return
-        o = it.data(Qt.UserRole)
+            o = self.enregistrer_outil()
+            if not o:
+                return
+            enregistre_au_passage = True
+        else:
+            o = it.data(Qt.UserRole)
+            enregistre_au_passage = False
         d = self._dossier_freecad()
         if d is None:
             return
@@ -912,10 +920,13 @@ class Fenetre(QMainWindow):
             self, APP_NOM,
             "« %s » est dans FreeCAD (%s).\n\nFichier : %s\n%s\n\n"
             "Ses vitesses sont retenues ici, hors des fichiers de FreeCAD, "
-            "qui ne sait pas les garder."
+            "qui ne sait pas les garder — elles reviendront avec lui au "
+            "prochain « Lire FreeCAD ».%s"
             % (o['name'], d['version'], nom_fichier,
                ('Bibliothèque : ' + lib['label']) if lib else
-               'Rangé dans le magasin, sans bibliothèque.'))
+               'Rangé dans le magasin, sans bibliothèque.',
+               "\n\n(L'outil a aussi été ajouté à la bibliothèque de l'appli.)"
+               if enregistre_au_passage else ''))
 
     # ------------------------------------------------------------ actions
     def choisir_matiere(self, mid):
@@ -1091,6 +1102,12 @@ class Fenetre(QMainWindow):
         self.e_nom.clear()
         self._rendre_biblio()
         self._sauver_reglages()
+        # Le laisser sélectionné : c'est celui dont on vient de parler.
+        for i in range(self.liste.count()):
+            if (self.liste.item(i).data(Qt.UserRole) or {}).get('name') == nom:
+                self.liste.setCurrentRow(i)
+                break
+        return outil
 
     def _rendre_biblio(self):
         self.liste.clear()

@@ -119,7 +119,20 @@ Deux boutons sous la bibliothèque :
   géométrie vient de FreeCAD ; les vitesses reviennent aussi **si l'appli les
   connaît**, sinon elle les calcule pour la matière choisie.
 * **↑ Écrire dans FreeCAD…** — poser l'outil dans une bibliothèque. Il apparaît
-  alors dans le Gestionnaire de bibliothèque, et le Job peut s'en servir.
+  alors dans le Gestionnaire de bibliothèque, et le Job peut s'en servir. Si
+  aucun outil n'est choisi dans la liste, c'est celui **à l'écran** qui est
+  écrit, et il est enregistré au passage.
+
+### Le cycle, pour une fraise neuve
+
+| | |
+|---|---|
+| 1 | matière, diamètre, dents — et le détail de la fraise si on l'a |
+| 2 | **↑ Écrire dans FreeCAD…** : la fraise et ses vitesses sont liées |
+| 3 | **Export JSON…** puis le bouton CAM : le Job reçoit les cinq valeurs |
+
+Les étapes 2 et 3 sont indépendantes : la première sert à retrouver ses
+réglages plus tard, la seconde à les poser dans un Job précis.
 
 > **Pourquoi les vitesses vivent à côté.** Un `.fctb` a bien un champ libre, et
 > l'on pourrait croire qu'il suffit d'y ranger broche et avance. Mesuré sur
