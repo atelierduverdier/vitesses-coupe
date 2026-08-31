@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Vitesses de coupe
+GenericName=Calculateur d'avances CNC
+Comment=Broche, avance et copeau pour le fraisage — neuf matières
+Exec=python3 /home/christophe/Projets/logiciels/vitesses-coupe/vitesses_coupe.py
+Icon=/home/christophe/Projets/logiciels/vitesses-coupe/chapeau.svg
+Terminal=false
+Categories=Utility;Engineering;
+Keywords=CNC;fraisage;avance;broche;copeau;
