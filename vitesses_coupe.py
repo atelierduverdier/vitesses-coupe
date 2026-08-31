@@ -457,11 +457,23 @@ class Fenetre(QMainWindow):
         self.f_vfmax = Champ('Avance max', 'mm/min')
         self.f_vfmax.edit.setText('1500')
         self.f_vfmax.aide.setText("Ce que la machine tient vraiment.")
+        # Les rapides n'entrent PAS dans le calcul : ce sont des vitesses de
+        # transport (G0), propres à la machine. Elles sont là parce que le
+        # Tool Controller de FreeCAD les réclame, et qu'il vaut mieux les
+        # emporter avec l'outil que les retaper de mémoire.
+        self.f_rapidh = Champ('Rapide horizontal', 'mm/min')
+        self.f_rapidh.edit.setText('8000')
+        self.f_rapidv = Champ('Rapide vertical', 'mm/min')
+        self.f_rapidv.edit.setText('2700')
+        self.f_rapidv.aide.setText("Déplacements hors matière, lus dans la config machine.")
         g.addWidget(self.f_min, 1, 0)
         g.addWidget(self.f_max, 1, 1)
         g.addWidget(self.f_plunge, 2, 0)
         g.addWidget(self.f_vfmax, 2, 1)
-        for f in (self.f_min, self.f_max, self.f_plunge, self.f_vfmax):
+        g.addWidget(self.f_rapidh, 3, 0)
+        g.addWidget(self.f_rapidv, 3, 1)
+        for f in (self.f_min, self.f_max, self.f_plunge, self.f_vfmax,
+                  self.f_rapidh, self.f_rapidv):
             f.edit.textEdited.connect(self.recalculer)
         self.corps_machine.hide()
         v.addWidget(self.corps_machine)
@@ -724,6 +736,8 @@ class Fenetre(QMainWindow):
                      n=str(int(round(r['n']))), fz=str(round(r['fz'], 3)),
                      ae=self.f_ae.valeur(), vf=int(round(r['vf'])),
                      plunge=int(round(r['vz'])),
+                     rapidH=int(round(C.num(self.f_rapidh.valeur(), 8000))),
+                     rapidV=int(round(C.num(self.f_rapidv.valeur(), 2700))),
                      sub="%s tr/min · %s mm/min" % (C.fmt(r['n']), C.fmt(r['vf'])))
         for i, o in enumerate(self.bibliotheque):
             if o['name'] == nom:
@@ -801,10 +815,14 @@ class Fenetre(QMainWindow):
         Path(chemin).write_text(contenu + '\n', encoding='utf-8')
         QMessageBox.information(
             self, APP_NOM,
-            "Écrit : %s\n\nLe .fctb porte la géométrie de la fraise. Les vitesses "
-            "vont dans le Tool Controller du Job :\n"
-            "  SpindleSpeed = %s\n  HorizFeed = %s mm/min\n  VertFeed = %s mm/min"
-            % (Path(chemin).name, o.get('n'), o.get('vf'), o.get('plunge')))
+            "Écrit : %s\n\nUn .fctb ne peut pas porter de vitesses : il décrit la "
+            "fraise. Les cinq valeurs ci-dessous vont dans le Tool Controller du "
+            "Job — ou bien lancez la macro macro_tool_controller.py, qui les pose "
+            "toute seule à partir de la bibliothèque exportée.\n\n"
+            "  SpindleSpeed = %s\n  HorizFeed  = %s mm/min\n  VertFeed   = %s mm/min\n"
+            "  HorizRapid = %s mm/min\n  VertRapid  = %s mm/min"
+            % (Path(chemin).name, o.get('n'), o.get('vf'), o.get('plunge'),
+               o.get('rapidH', 8000), o.get('rapidV', 2700)))
 
     # ------------------------------------------------------- persistance
     def _sauver_reglages(self):
@@ -813,7 +831,8 @@ class Fenetre(QMainWindow):
             FICHIER_CONF.write_text(json.dumps({
                 'version': VERSION, 'theme': self.theme,
                 'machine': {'min': self.f_min.valeur(), 'max': self.f_max.valeur(),
-                            'plunge': self.f_plunge.valeur(), 'vfMax': self.f_vfmax.valeur()},
+                            'plunge': self.f_plunge.valeur(), 'vfMax': self.f_vfmax.valeur(),
+                            'rapidH': self.f_rapidh.valeur(), 'rapidV': self.f_rapidv.valeur()},
                 'bibliotheque': self.bibliotheque,
             }, ensure_ascii=False, indent=2), encoding='utf-8')
         except OSError:
@@ -830,7 +849,8 @@ class Fenetre(QMainWindow):
             self.theme = d['theme']
         m = d.get('machine') or {}
         for cle, champ in (('min', self.f_min), ('max', self.f_max),
-                           ('plunge', self.f_plunge), ('vfMax', self.f_vfmax)):
+                           ('plunge', self.f_plunge), ('vfMax', self.f_vfmax),
+                           ('rapidH', self.f_rapidh), ('rapidV', self.f_rapidv)):
             if m.get(cle):
                 champ.edit.setText(str(m[cle]))
         self.bibliotheque = d.get('bibliotheque') or []

@@ -37,6 +37,7 @@ copeau en reprise de contour, les **réglages machine** repliés, une
 | `coupe_noyau.py` | les matières et les formules. Ni Qt ni web — la couche qu'on teste. |
 | `vitesses_coupe.py` | l'interface PySide6. |
 | `tests_noyau.py` | 38 contrôles sur le calcul : `python3 tests_noyau.py` |
+| `macro_tool_controller.py` | macro FreeCAD : remplit un Tool Controller depuis la bibliothèque exportée |
 
 **Le noyau est partagé avec l'appli web du site**, qui en porte une
 traduction JavaScript ligne pour ligne. Les valeurs de référence des tests ne
@@ -44,6 +45,28 @@ sortent pas du code : elles viennent des captures du dossier de remise
 (`design_handoff_vitesses_de_coupe`), qui affichent Vf 6 300, broche 21 000,
 Vz 2 205, Vc 396 et 0,30 mm/tr pour du bois tendre en Ø6 à deux dents. Un test
 qui reprend la formule qu'il vérifie ne vérifie rien.
+
+## Vers FreeCAD
+
+Un fichier d'outil `.fctb` décrit la **fraise** — diamètre, dents, longueurs — et
+ne peut pas porter de vitesses : celles-ci appartiennent au **Tool Controller**
+du Job, qui naît donc à zéro. Deux façons de le remplir :
+
+* **à la main** — l'appli affiche les cinq valeurs à recopier ;
+* **avec la macro** — `macro_tool_controller.py`, à copier dans le dossier des
+  macros FreeCAD. Elle lit la bibliothèque exportée (`outils-vitesses-coupe.json`),
+  demande quel outil et quel contrôleur, et pose les cinq valeurs.
+
+> **Le piège que la macro évite.** Les propriétés `HorizFeed`, `VertFeed`,
+> `HorizRapid` et `VertRapid` sont stockées en **mm/s** alors que l'interface
+> affiche des mm/min. Écrire `tc.HorizFeed = 6300` ne lève aucune erreur et
+> donne **378 000 mm/min** — soixante fois trop. Seule la forme
+> `tc.HorizFeed = "6300 mm/min"` est juste. Mesuré sur FreeCAD 1.1.3.
+
+Les deux **rapides** ne sortent pas du calcul : ce sont des vitesses de
+transport, propres à la machine. Elles se règlent dans le panneau « Machine »
+et se lisent dans la configuration LinuxCNC (`MAX_VELOCITY` de chaque axe, en
+mm/s — à multiplier par 60).
 
 ## Raccourcis
 
