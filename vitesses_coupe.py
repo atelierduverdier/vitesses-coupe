@@ -229,14 +229,25 @@ class Fenetre(QMainWindow):
         colonnes.addWidget(defil, 1)
 
         rail = QVBoxLayout()
+        rail.setContentsMargins(0, 0, 0, 0)
         rail.setSpacing(16)
         rail.addWidget(self._bloc_resultat())
         rail.addWidget(self._bloc_biblio())
         rail.addStretch(1)
         hote_rail = QWidget()
         hote_rail.setLayout(rail)
-        hote_rail.setFixedWidth(396)
-        colonnes.addWidget(hote_rail, 0)
+
+        # Le rail DÉFILE au lieu d'écraser : sur une fenêtre courte, avec le
+        # panneau « fraise » ouvert et un avertissement long, son contenu
+        # dépasse — et sans défilement Qt comprime les cartes jusqu'à rogner
+        # les chiffres.
+        defil_rail = QScrollArea()
+        defil_rail.setWidgetResizable(True)
+        defil_rail.setFrameShape(QFrame.NoFrame)
+        defil_rail.setWidget(hote_rail)
+        defil_rail.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        defil_rail.setFixedWidth(412)          # 396 + la place de la barre
+        colonnes.addWidget(defil_rail, 0)
 
         racine.addLayout(colonnes, 1)
 
@@ -614,6 +625,11 @@ class Fenetre(QMainWindow):
     def _bloc_resultat(self):
         self.carte_resultat = QFrame()
         self.carte_resultat.setObjectName('resultat')
+        # Elle ne se comprime pas : c'est ce qu'on vient lire. Écrasée, elle
+        # rogne ses propres chiffres — vu le 31/08 avec le panneau « fraise »
+        # ouvert et un avertissement de trois lignes : 383 px demandés,
+        # 323 accordés, et « 6 300 » coupé en deux dans la hauteur.
+        self.carte_resultat.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         v = QVBoxLayout(self.carte_resultat)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(0)
