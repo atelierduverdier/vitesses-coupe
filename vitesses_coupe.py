@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import coupe_noyau as C
 import freecad_biblio as FB
+import carnet_ui as CU
 
 APP_NOM = "Vitesses de coupe"
 VERSION = "1.0.0"
@@ -165,6 +166,7 @@ class Fenetre(QMainWindow):
         self.bibliotheque = []
         self.dossier_fc = ''      # l'installation FreeCAD choisie
         self.fichier_fc = ''      # le .fctb d'où vient l'outil courant
+        self.fen_carnet = None    # le carnet d'essais, ouvert à la demande
         self.mono = police_mono()
         self.sans = police_texte()
 
@@ -195,6 +197,11 @@ class Fenetre(QMainWindow):
         bloc_titre.addWidget(st)
         entete.addLayout(bloc_titre)
         entete.addStretch(1)
+        self.btn_carnet = QPushButton("Carnet d'essais")
+        self.btn_carnet.setObjectName('btnTheme')
+        self.btn_carnet.setCursor(Qt.PointingHandCursor)
+        self.btn_carnet.clicked.connect(self.ouvrir_carnet)
+        entete.addWidget(self.btn_carnet)
         self.btn_theme = QPushButton('☾  nuit')
         self.btn_theme.setObjectName('btnTheme')
         self.btn_theme.setCursor(Qt.PointingHandCursor)
@@ -958,7 +965,23 @@ class Fenetre(QMainWindow):
     def basculer_theme(self):
         self.theme = 'nuit' if self.theme == 'jour' else 'jour'
         self._appliquer_theme()
+        if self.fen_carnet is not None:
+            self.fen_carnet.rafraichir_theme()
         self._sauver_reglages()
+
+    # ------------------------------------------------------- carnet d'essais
+    def ouvrir_carnet(self):
+        """Non modale : on doit pouvoir retoucher le calculateur pendant
+        que le carnet reste ouvert à côté — « Noter cet essai » y relit
+        l'état du calculateur au moment du clic."""
+        if self.fen_carnet is None:
+            self.fen_carnet = CU.FenetreCarnet(self)
+        else:
+            self.fen_carnet.rafraichir_theme()
+        self.fen_carnet.preremplir_depuis_calculateur()
+        self.fen_carnet.show()
+        self.fen_carnet.raise_()
+        self.fen_carnet.activateWindow()
 
     # ------------------------------------------------------------ calcul
     def recalculer(self):
@@ -1275,6 +1298,13 @@ class Fenetre(QMainWindow):
             for w in (self.carte_resultat,):
                 w.style().unpolish(w)
                 w.style().polish(w)
+
+    def contexte_theme(self):
+        """(feuille de style rendue, palette brute) du thème courant — pour
+        les fenêtres annexes (le carnet) qui doivent le suivre sans
+        dupliquer JOUR/NUIT/FEUILLE dans un second fichier."""
+        p = NUIT if self.theme == 'nuit' else JOUR
+        return FEUILLE % dict(p, mono=self.mono, sans=self.sans), p
 
 
 # =========================================================================

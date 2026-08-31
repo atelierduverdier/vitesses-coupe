@@ -38,6 +38,7 @@ copeau en reprise de contour, les **réglages machine** repliés, une
 | `vitesses_coupe.py` | l'interface PySide6. |
 | `tests_noyau.py` | 38 contrôles sur le calcul : `python3 tests_noyau.py` |
 | `carnet_noyau.py` | **le carnet d'essais** : la théorie calcule, le carnet retient ce que la matière a répondu. Ni Qt ni web. |
+| `carnet_ui.py` | l'interface du carnet — consulter, noter, compléter, supprimer. PySide6, greffée sur `vitesses_coupe.py`. |
 | `tests_carnet.py` | les contrôles du carnet : `python3 tests_carnet.py` |
 | `importer_outil_coupe.FCMacro` | **le bouton de l'atelier CAM** : crée la fraise, son Tool Controller et pose les vitesses |
 | `icone_outil_coupe.svg` | l'icône de ce bouton |
@@ -202,16 +203,32 @@ pendant fraiseuse du nuancier laser.
 
 Un essai retient la matière telle qu'elle était (« chêne de récup »), la
 fraise, les vitesses réellement tenues, une photo du résultat et un **verdict
-court** (« propre », « ça brûle »). Avant un nouveau travail, on consulte :
-`chercher()` rend les essais de la matière, du Ø le plus proche au plus
-lointain et du plus récent au plus ancien, et `comparer_theorie()` situe
-chaque essai face au calcul — le **rapport de copeau** surtout : 0,13, c'est
-la fraise qui frottait.
+court** (« propre », « ça brûle »). Le bouton **« Carnet d'essais »**, en
+haut de la fenêtre, ouvre le carnet dans un panneau à part — une fenêtre
+annexe, non modale : elle reste ouverte pendant qu'on retouche le
+calculateur juste à côté, et c'est même l'intérêt.
 
-Pour l'instant seul le cœur existe (`carnet_noyau.py`) ; l'interface viendra.
+**Avant un nouveau travail, on consulte.** Le panneau s'ouvre déjà filtré
+sur la matière et le Ø du calculateur — il sait déjà ce qu'on s'apprête à
+fraiser. La liste vient de `chercher()` : les essais de la matière, du Ø le
+plus proche au plus lointain puis du plus récent au plus ancien ; un champ
+cherche aussi en texte libre (essence, verdict, travail…), sans se soucier
+des accents. Un essai sans verdict se voit d'un coup d'œil dans la liste
+(teinté comme un avertissement) : c'est un essai à compléter. Choisir un
+essai affiche sa photo, ses cotes et le **rapport de copeau** rendu par
+`comparer_theorie()` — 13 %, c'est la fraise qui frottait.
+
+**Après le travail, on note.** Le bouton « + Noter un essai » préremplit le
+formulaire depuis l'état courant du calculateur (matière, Ø, dents, broche,
+avance) ; il ne reste qu'à ajouter l'essence, l'opération, le verdict et,
+si on l'a, une photo. « Compléter… » rouvre le même formulaire sur un essai
+déjà noté — le verdict et la photo arrivent souvent après coup — et
+« Supprimer » retire un essai (avec confirmation, photo comprise).
+
 Le carnet vit **hors du dépôt**, avec les affaires de la machine :
 `~/Projets/machine/carnet-essais/` — un `carnet.json` lisible, qui n'est
-jamais écrasé s'il est abîmé, et les photos à côté, nommées comme les essais.
+jamais écrasé s'il est abîmé (le panneau le dit, plutôt que de repartir sur
+une liste vide), et les photos à côté, nommées comme les essais.
 
 ## Licence
 
