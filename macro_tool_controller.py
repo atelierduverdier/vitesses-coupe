@@ -36,6 +36,11 @@
 # `FreeCAD.Units.Quantity(6300, FreeCAD.Units.Velocity)` tombe dans le même
 # piège que le nombre nu. D'où `_poser_vitesse()` plus bas, qui est le seul
 # endroit de cette macro où une vitesse est écrite.
+#
+# SECOND PIÈGE : les RAPIDES ne sont pas des propriétés de l'outil. Elles
+# vivent dans le `SetupSheet` du Job, qui les RÉIMPOSE au Tool Controller à
+# chaque recalcul — écrites sur le contrôleur, elles retombent à zéro sans
+# le moindre message. On remonte donc au Job pour les poser.
 # =========================================================================
 
 import json
@@ -81,6 +86,23 @@ def _controleurs_du_document(doc):
         if 'HorizFeed' in props and 'SpindleSpeed' in props:
             trouves.append(obj)
     return trouves
+
+
+def _job_du_controleur(doc, tc):
+    """Le Job auquel ce Tool Controller appartient, s'il en a un.
+
+    Les vitesses RAPIDES vivent dans le `SetupSheet` du Job, qui les
+    réimpose au contrôleur à chaque recalcul : il faut donc remonter
+    jusqu'à lui pour qu'elles tiennent.
+    """
+    for obj in doc.Objects:
+        if hasattr(obj, 'Tools') and hasattr(obj, 'SetupSheet'):
+            try:
+                if tc in obj.Tools.Group:
+                    return obj
+            except AttributeError:
+                continue
+    return None
 
 
 def _choisir(titre, question, choix):
@@ -164,11 +186,19 @@ def main():
         if broche > 0:
             tc.SpindleSpeed = broche          # Float, pas une vitesse : pas d'unité
             pose['SpindleSpeed'] = "%.0f tr/min" % broche
-        for propriete, cle in (('HorizFeed', 'vf'), ('VertFeed', 'plunge'),
-                               ('HorizRapid', 'rapidH'), ('VertRapid', 'rapidV')):
+        # Avances de COUPE : elles appartiennent bien à l'outil.
+        for propriete, cle in (('HorizFeed', 'vf'), ('VertFeed', 'plunge')):
             obtenu = _poser_vitesse(tc, propriete, outil.get(cle))
             if obtenu is not None:
                 pose[propriete] = "%.0f mm/min" % obtenu
+        # RAPIDES : elles appartiennent au JOB, pas au contrôleur. Écrites
+        # ici, elles retombent à zéro au premier recalcul — voir le piège 2.
+        job = _job_du_controleur(doc, tc)
+        if job is not None:
+            for propriete, cle in (('HorizRapid', 'rapidH'), ('VertRapid', 'rapidV')):
+                obtenu = _poser_vitesse(job.SetupSheet, propriete, outil.get(cle))
+                if obtenu is not None:
+                    pose[propriete + ' (sur le Job)'] = "%.0f mm/min" % obtenu
         doc.commitTransaction()
     except Exception as e:                    # noqa: BLE001 — on rend la main propre
         doc.abortTransaction()
@@ -177,13 +207,12 @@ def main():
 
     doc.recompute()
 
-    manquants = [p for p in ('HorizFeed', 'VertFeed', 'HorizRapid', 'VertRapid')
+    manquants = [p for p in ('HorizFeed', 'VertFeed')
                  if p not in pose]
     texte = ["%s reçoit les réglages de « %s » :"
              % (tc.Label, outil.get('name', 'sans nom')), ""]
-    for cle in ('SpindleSpeed', 'HorizFeed', 'VertFeed', 'HorizRapid', 'VertRapid'):
-        if cle in pose:
-            texte.append("  %-13s %s" % (cle, pose[cle]))
+    for cle in sorted(pose):
+        texte.append("  %-24s %s" % (cle, pose[cle]))
     if manquants:
         texte += ["", "Non renseignés (absents du fichier, laissés tels quels) :",
                   "  " + ", ".join(manquants)]
