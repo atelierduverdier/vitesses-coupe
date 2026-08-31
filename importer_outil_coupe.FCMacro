@@ -9,7 +9,7 @@
 #
 # INSTALLER LE BOUTON (une fois) :
 #   1. copier ce fichier dans le dossier des macros
-#      (~/.local/share/FreeCAD/Macro) ainsi que l'icône
+#      (~/.local/share/FreeCAD/v1-1/Macro) ainsi que l'icône
 #      icone_outil_coupe.svg qui l'accompagne ;
 #   2. Outils → Personnaliser… → onglet « Macros » ;
 #   3. Macro : importer_outil_coupe.FCMacro

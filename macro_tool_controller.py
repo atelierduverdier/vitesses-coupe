@@ -16,7 +16,7 @@
 #      contrôleur à remplir.
 #
 # À INSTALLER une fois pour toutes en la copiant dans le dossier des macros
-# (Édition → Préférences → Général → Macro, souvent ~/.local/share/FreeCAD/Macro).
+# (FreeCAD 1.1 : ~/.local/share/FreeCAD/v1-1/Macro — le dossier est VERSIONNÉ, un ~/.local/share/FreeCAD/Macro sans version peut exister et n'est PAS lu).
 #
 # =========================================================================
 #  LE PIÈGE, ET IL EST SÉVÈRE

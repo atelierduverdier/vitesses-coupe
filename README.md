@@ -64,7 +64,14 @@ du Job, qui naît donc à zéro. Deux façons de le remplir :
 ### Poser le bouton dans l'atelier CAM (une fois)
 
 1. copier `importer_outil_coupe.FCMacro` **et** `icone_outil_coupe.svg` dans
-   le dossier des macros (`~/.local/share/FreeCAD/Macro`) ;
+   le dossier des macros. **Attention, il est VERSIONNÉ** : FreeCAD 1.1 lit
+   `~/.local/share/FreeCAD/v1-1/Macro`, et un `~/.local/share/FreeCAD/Macro`
+   sans numéro de version peut exister à côté sans jamais être lu. En cas de
+   doute, la réponse vient de FreeCAD lui-même :
+
+   ```python
+   FreeCAD.getUserMacroDir(True)
+   ```
 2. **Outils → Personnaliser… → onglet Macros** : choisir la macro, lui donner
    un texte de menu (« Importer un outil de coupe »), désigner l'icône, puis
    **Ajouter** ;
