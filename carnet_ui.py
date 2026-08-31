@@ -49,6 +49,34 @@ def titre_section(texte):
     return l
 
 
+# La feuille de l'appli met TOUTE saisie en chasse fixe : au calculateur
+# c'est juste, chaque champ y est un nombre. Le carnet, lui, mélange les
+# nombres et la prose (« chêne de récup », « propre, ça brûle »), et la
+# prose en chasse fixe fait terminal. On ne touche donc PAS à la feuille
+# partagée : on marque les widgets de prose d'une propriété et on ajoute
+# cette seule règle par-dessus — même procédé que `QLineEdit[calcule]`.
+# Les cotes, la broche, l'avance et le rapport de copeau restent en chasse
+# fixe : ce sont des colonnes de chiffres, elles doivent s'aligner.
+#
+# PIÈGE DE SPÉCIFICITÉ, payé au rendu : QSS suit les règles de CSS, donc un
+# sélecteur d'identifiant (`QLabel#valPetite`, 101) écrase une propriété
+# seule (`*[prose="oui"]`, 10) — le titre du détail restait en chasse fixe
+# alors que la marque était bien posée. Il faut donc RE-viser l'identifiant
+# en lui ajoutant la propriété (111). `QLabel#aide` n'y figure pas : cette
+# règle-là ne fixe aucune police, ces libellés héritent déjà du sans.
+SUPPLEMENT_PROSE = """
+*[prose="oui"] { font-family: '%(sans)s'; }
+QLineEdit[prose="oui"] { font-family: '%(sans)s'; }
+QLabel#valPetite[prose="oui"] { font-family: '%(sans)s'; }
+"""
+
+
+def prose(widget):
+    """Marque un widget comme portant de la prose, pas des chiffres."""
+    widget.setProperty('prose', 'oui')
+    return widget
+
+
 def _champ(libelle, widget):
     """Un libellé au-dessus d'un widget de saisie — la version légère du
     `Champ` de vitesses_coupe.py, sans la ligne d'aide (pas besoin ici)."""
@@ -131,7 +159,7 @@ class CadrePhoto(QFrame):
         self.setFixedSize(self.LARGEUR, self.HAUTEUR)
         v = QVBoxLayout(self)
         v.setContentsMargins(8, 8, 8, 8)
-        self._label = QLabel('(pas de photo)')
+        self._label = prose(QLabel('(pas de photo)'))
         self._label.setObjectName('aide')
         self._label.setAlignment(Qt.AlignCenter)
         self._label.setWordWrap(True)
@@ -192,16 +220,16 @@ class FormulaireEssai(QDialog):
         _peupler_combo_matieres(self.combo_matiere, '— non précisée —')
         i = self.combo_matiere.findData(depart.get('matiere') or '')
         self.combo_matiere.setCurrentIndex(i if i >= 0 else 0)
-        self.e_essence = QLineEdit(depart.get('essence') or '')
+        self.e_essence = prose(QLineEdit(depart.get('essence') or ''))
         self.e_essence.setPlaceholderText('chêne de récup…')
 
         self.combo_operation = QComboBox()
         self.combo_operation.setEditable(True)
         self.combo_operation.addItems(K.OPERATIONS)
         self.combo_operation.setCurrentText(depart.get('operation') or '')
-        self.e_travail = QLineEdit(depart.get('travail') or '')
+        self.e_travail = prose(QLineEdit(depart.get('travail') or ''))
         self.e_travail.setPlaceholderText('porte hammam…')
-        self.e_fraise = QLineEdit(depart.get('fraise') or '')
+        self.e_fraise = prose(QLineEdit(depart.get('fraise') or ''))
         self.e_fraise.setPlaceholderText("nom ou description de l'outil")
 
         self.e_d = QLineEdit(_mm(depart.get('d')))
@@ -214,9 +242,9 @@ class FormulaireEssai(QDialog):
         self.e_ae = QLineEdit(_mm(depart.get('ae')))
         self.e_ae.setPlaceholderText('pleine largeur')
 
-        self.e_verdict = QLineEdit(depart.get('verdict') or '')
+        self.e_verdict = prose(QLineEdit(depart.get('verdict') or ''))
         self.e_verdict.setPlaceholderText('propre, ça brûle, ras…')
-        self.e_note = QLineEdit(depart.get('note') or '')
+        self.e_note = prose(QLineEdit(depart.get('note') or ''))
         self.e_note.setPlaceholderText('conditions, détails…')
 
         for w in (self.e_date, self.combo_matiere, self.e_essence,
@@ -249,6 +277,7 @@ class FormulaireEssai(QDialog):
         bloc_photo.addWidget(titre_section('Photo'))
         self.lbl_photo = QLabel('(aucune)')
         self.lbl_photo.setObjectName('aide')
+        prose(self.lbl_photo)
         self.lbl_photo.setWordWrap(True)
         btn_photo = QPushButton('Choisir une photo…')
         btn_photo.setObjectName('mini')
@@ -387,7 +416,7 @@ class FenetreCarnet(QDialog):
         self.combo_matiere.currentIndexChanged.connect(self._rafraichir_liste)
         self.champ_diametre.textEdited.connect(self._rafraichir_liste)
 
-        self.champ_recherche = QLineEdit()
+        self.champ_recherche = prose(QLineEdit())
         self.champ_recherche.setPlaceholderText('Rechercher : chêne, ça brûle…')
         self.champ_recherche.setMinimumHeight(38)
         self.champ_recherche.textEdited.connect(self._rafraichir_liste)
@@ -422,10 +451,10 @@ class FenetreCarnet(QDialog):
         entete_detail.addWidget(self.cadre_photo)
         bloc_titre = QVBoxLayout()
         bloc_titre.setSpacing(6)
-        self.lbl_titre_detail = QLabel('Choisir un essai dans la liste.')
+        self.lbl_titre_detail = prose(QLabel('Choisir un essai dans la liste.'))
         self.lbl_titre_detail.setObjectName('valPetite')
         self.lbl_titre_detail.setWordWrap(True)
-        self.lbl_sous_detail = QLabel('')
+        self.lbl_sous_detail = prose(QLabel(''))
         self.lbl_sous_detail.setObjectName('aide')
         self.lbl_sous_detail.setWordWrap(True)
         self.lbl_cotes_detail = QLabel('')
@@ -455,7 +484,7 @@ class FenetreCarnet(QDialog):
         self.lbl_copeau = QLabel('—')
         self.lbl_copeau.setObjectName('valGrande')
         vc.addWidget(self.lbl_copeau)
-        self.lbl_copeau_note = QLabel('')
+        self.lbl_copeau_note = prose(QLabel(''))
         self.lbl_copeau_note.setObjectName('aide')
         self.lbl_copeau_note.setWordWrap(True)
         vc.addWidget(self.lbl_copeau_note)
@@ -486,6 +515,7 @@ class FenetreCarnet(QDialog):
     # ------------------------------------------------------------ thème
     def rafraichir_theme(self):
         feuille, palette = self.principale.contexte_theme()
+        feuille += SUPPLEMENT_PROSE % {'sans': self.principale.sans}
         self.setStyleSheet(feuille)
         self.palette_active = palette
         # QListWidgetItem n'est pas un QWidget : sa couleur est posée à la
