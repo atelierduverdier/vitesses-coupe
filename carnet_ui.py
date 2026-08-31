@@ -663,7 +663,9 @@ class FenetreCarnet(QDialog):
             return
         reponse = QMessageBox.question(
             self, "Carnet d'essais",
-            "Supprimer l'essai du %s (Ø%s, %s) ?\nLa photo part avec lui."
+            # Pas de parenthèses ici : `_libelle_matiere` en pose déjà autour
+            # de la matière, et « (Ø6, douglas (Bois tendre)) » s'emboîtait.
+            "Supprimer l'essai du %s — Ø%s, %s ?\nLa photo part avec lui."
             % (_date_fr(e.get('date')), _mm(e.get('d')), _libelle_matiere(e)),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reponse != QMessageBox.Yes:
