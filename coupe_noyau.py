@@ -169,3 +169,131 @@ def fmt(x, dec=0):
         return '—'
     s = ('{:,.%df}' % dec).format(x)
     return s.replace(',', ' ').replace('.', ',')
+
+# =========================================================================
+#  La fraise elle-même
+# =========================================================================
+# Rien de ce qui suit n'entre dans Vf = N x Z x fz : la géométrie ne change
+# PAS les vitesses. Elle sert à deux choses, et seulement deux :
+#   1. écrire un fichier d'outil FreeCAD (.fctb) qui décrit la vraie fraise
+#      plutôt qu'une fraise inventée — FreeCAD s'en sert pour la simulation
+#      de collision et la profondeur atteignable ;
+#   2. produire des avertissements que la formule ne peut pas donner : une
+#      fraise qui ne plonge pas, une descendante qui n'évacue rien, une
+#      hauteur de coupe plus courte que la passe conseillée.
+
+# Les formes que FreeCAD sait dessiner, et le paramètre propre à chacune.
+FORMES = [
+    dict(id='plat',     label='Plat',    shape='endmill.fcstd',  type='Endmill',  extra=None),
+    dict(id='boule',    label='Boule',   shape='ballend.fcstd',  type='Ballend',  extra=None),
+    dict(id='torique',  label='Torique', shape='bullnose.fcstd', type='Bullnose',
+         extra=('rayon', 'Rayon de coin', 'mm', 'CornerRadius')),
+    dict(id='vbit',     label='V',       shape='v-bit.fcstd',    type='V-bit',
+         extra=('angle', 'Angle de pointe', '°', 'CuttingEdgeAngle')),
+]
+FORME_PAR_ID = {f['id']: f for f in FORMES}
+
+# Le sens de l'hélice. Il ne change aucun chiffre, mais il commande la
+# façon dont le copeau sort — donc la profondeur de passe raisonnable.
+HELICES = [
+    dict(id='montante',    label='Montante',
+         note="Les copeaux sortent vers le haut : rainures profondes possibles, "
+              "mais la face du dessus s'écaille."),
+    dict(id='descendante', label='Descendante',
+         note="Belle face du dessus, mais les copeaux sont tassés dans la "
+              "rainure : réduire la profondeur de passe, ça chauffe vite.",
+         alerte="Fraise descendante : les copeaux ne s’évacuent pas vers le "
+                "haut. Passes moins profondes, et surveiller l’échauffement."),
+    dict(id='compression', label='Compression',
+         note="Propre des deux côtés, mais il lui faut une profondeur "
+              "suffisante pour que la partie basse morde.",
+         alerte="Fraise de compression : sous une certaine profondeur, la "
+                "partie basse ne travaille pas et l’intérêt disparaît."),
+    dict(id='droite',      label='Droite',
+         note="Pas d'hélice : effort axial faible, évacuation médiocre."),
+]
+HELICE_PAR_ID = {h['id']: h for h in HELICES}
+
+
+def geometrie(d, forme='plat', hauteur_coupe=None, longueur=None,
+              queue=None, rayon=None, angle=None):
+    """Complète la géométrie d'une fraise, en déduisant ce qui manque.
+
+    Les valeurs déduites sont des ordres de grandeur d'usage — hauteur de
+    coupe 3 x Ø, longueur 8 x Ø, queue au diamètre de coupe. Elles ne valent
+    que tant que personne n'a mesuré la vraie fraise, et c'est justement ce
+    que les champs permettent de corriger.
+    """
+    d = num(d, 6.0)
+    f = FORME_PAR_ID.get(forme, FORME_PAR_ID['plat'])
+    g = dict(
+        forme=f,
+        diametre=d,
+        hauteur_coupe=num(hauteur_coupe, round(d * 3, 2)),
+        longueur=num(longueur, round(d * 8, 2)),
+        queue=num(queue, d),
+        deduit=[],
+    )
+    for cle, valeur in (('hauteur_coupe', hauteur_coupe), ('longueur', longueur),
+                        ('queue', queue)):
+        if not num(valeur, 0):
+            g['deduit'].append(cle)
+    if f['id'] == 'torique':
+        g['rayon'] = num(rayon, round(d / 6, 2))
+    if f['id'] == 'vbit':
+        g['angle'] = num(angle, 90.0)
+    # Une longueur totale plus courte que la partie coupante n'a pas de sens.
+    if g['longueur'] < g['hauteur_coupe']:
+        g['longueur'] = round(g['hauteur_coupe'] * 1.5, 2)
+    return g
+
+
+def fichier_outil(nom, g, z, fz, helice='montante', plongeant=True):
+    """Le .fctb que FreeCAD attend, décrivant la fraise telle qu'elle est.
+
+    `shape-type` compte autant que `shape` : c'est lui que le Gestionnaire
+    de bibliothèque lit pour classer l'outil et choisir son icône.
+    """
+    p = {
+        'Diameter': '%g mm' % g['diametre'],
+        'Flutes': max(1, int(round(num(z, 2)))),
+        'Chipload': '%g mm' % num(fz, 0),
+        'CuttingEdgeHeight': '%g mm' % g['hauteur_coupe'],
+        'Length': '%g mm' % g['longueur'],
+        'ShankDiameter': '%g mm' % g['queue'],
+        'Material': 'Carbide',
+    }
+    if 'rayon' in g:
+        p['CornerRadius'] = '%g mm' % g['rayon']
+    if 'angle' in g:
+        p['CuttingEdgeAngle'] = '%g °' % g['angle']
+        p['TipDiameter'] = '0.1 mm'
+    return {
+        'version': 2,
+        'name': nom,
+        'shape': g['forme']['shape'],
+        'shape-type': g['forme']['type'],
+        'parameter': p,
+        # Ce que FreeCAD ne sait pas ranger, mais qu'on ne veut pas perdre.
+        'attribute': {'helice': helice, 'plongeant': bool(plongeant)},
+    }
+
+
+def avertissements_fraise(g, helice='montante', plongeant=True, ap_texte=''):
+    """Ce que la géométrie impose et que la formule ne dit pas."""
+    liste = []
+    h = HELICE_PAR_ID.get(helice)
+    if h and h.get('alerte'):
+        liste.append(h['alerte'])
+    if not plongeant:
+        liste.append("Bout non plongeant : entrer en rampe ou en hélice, "
+                     "jamais droit dans la matière.")
+    # La passe conseillée tient-elle dans la partie coupante ?
+    profondeurs = [float(x.replace(',', '.'))
+                   for x in __import__('re').findall(r'[\d,]+', ap_texte or '')]
+    if profondeurs and g['hauteur_coupe'] < max(profondeurs):
+        liste.append("La fraise ne coupe que sur %g mm, moins que la passe "
+                     "conseillée : plusieurs passes, ou une fraise plus longue."
+                     % g['hauteur_coupe'])
+    return liste
+

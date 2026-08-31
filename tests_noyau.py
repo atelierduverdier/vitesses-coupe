@@ -94,6 +94,47 @@ r = C.calculer('acier', '3', '2', m_min='8000', vf_max='99999')
 verifier("la broche conseillée, elle, ne descend jamais sous le mini",
          r['n'] >= 8000, True)
 
+print("\n--- La géométrie de la fraise ---")
+g = C.geometrie(6)
+verifier("rien de saisi : hauteur de coupe déduite à 3 × Ø", g['hauteur_coupe'], 18)
+verifier("longueur déduite à 8 × Ø", g['longueur'], 48)
+verifier("queue au diamètre de coupe", g['queue'], 6)
+verifier("les trois sont signalées comme déduites", len(g['deduit']), 3)
+g = C.geometrie(6, hauteur_coupe='22', longueur='60', queue='6.35')
+verifier("valeurs saisies : hauteur respectée", g['hauteur_coupe'], 22)
+verifier("queue en pouces acceptée", g['queue'], 6.35)
+verifier("plus rien de déduit", len(g['deduit']), 0)
+g = C.geometrie(6, longueur='10', hauteur_coupe='30')
+verifier("longueur plus courte que la coupe : corrigée", g['longueur'] >= 30, True)
+g = C.geometrie(6, forme='torique')
+verifier("torique : un rayon de coin apparaît", 'rayon' in g, True)
+g = C.geometrie(6, forme='vbit', angle='60')
+verifier("V : l'angle est repris", g['angle'], 60)
+
+print("\n--- Le fichier d'outil décrit la vraie fraise ---")
+f = C.fichier_outil("Essai", C.geometrie(6, hauteur_coupe='22'), 2, 0.15)
+verifier("forme plate", f['shape-type'], 'Endmill')
+verifier("hauteur de coupe reprise", f['parameter']['CuttingEdgeHeight'], '22 mm')
+verifier("nombre de dents", f['parameter']['Flutes'], 2)
+f = C.fichier_outil("V", C.geometrie(6, forme='vbit', angle='90'), 1, 0.1)
+verifier("forme en V", f['shape-type'], 'V-bit')
+verifier("angle de pointe présent", 'CuttingEdgeAngle' in f['parameter'], True)
+f = C.fichier_outil("T", C.geometrie(6, forme='torique', rayon='1.5'), 2, 0.15)
+verifier("rayon de coin présent", f['parameter']['CornerRadius'], '1.5 mm')
+verifier("l'hélice est conservée", f['attribute']['helice'], 'montante')
+
+print("\n--- Les avertissements que la formule ne peut pas donner ---")
+g = C.geometrie(6)
+verifier("montante, plongeante : rien à signaler",
+         len(C.avertissements_fraise(g, 'montante', True, '3–6 mm')), 0)
+verifier("descendante : on prévient de l'évacuation",
+         any('descendante' in a for a in C.avertissements_fraise(g, 'descendante', True, '3–6 mm')), True)
+verifier("non plongeante : on impose la rampe",
+         any('rampe' in a for a in C.avertissements_fraise(g, 'montante', False, '3–6 mm')), True)
+g = C.geometrie(6, hauteur_coupe='4')
+verifier("coupe plus courte que la passe conseillée : signalé",
+         any('ne coupe que' in a for a in C.avertissements_fraise(g, 'montante', True, '3–6 mm')), True)
+
 print("\n--- Les neuf matières répondent toutes ---")
 for famille, items in C.MATIERES:
     for m in items:

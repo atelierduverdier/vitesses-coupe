@@ -158,6 +158,8 @@ class Fenetre(QMainWindow):
         self.theme = 'jour'
         self.mode = 'avance'
         self.mat = 'bois-tendre'
+        self.forme = 'plat'
+        self.helice = 'montante'
         self.bibliotheque = []
         self.mono = police_mono()
         self.sans = police_texte()
@@ -208,6 +210,7 @@ class Fenetre(QMainWindow):
 
         gauche.addWidget(self._bloc_matieres())
         gauche.addWidget(self._bloc_outil())
+        gauche.addWidget(self._bloc_fraise())
         gauche.addWidget(self._bloc_calcul())
         gauche.addWidget(self._bloc_largeur())
         gauche.addWidget(self._bloc_machine())
@@ -297,6 +300,131 @@ class Fenetre(QMainWindow):
             duo.addWidget(f)
         v.addLayout(duo)
         return w
+
+    def _bloc_fraise(self):
+        """La géométrie de la fraise — repliée, car elle ne change aucun chiffre.
+
+        Elle sert au fichier d'outil FreeCAD, qui décrirait sinon une fraise
+        déduite du seul diamètre, et aux avertissements que la formule ne
+        peut pas donner.
+        """
+        carte = Carte()
+        v = QVBoxLayout(carte)
+        v.setContentsMargins(18, 12, 18, 12)
+        v.setSpacing(0)
+
+        tete = QHBoxLayout()
+        bloc = QVBoxLayout()
+        bloc.setSpacing(4)
+        bloc.addWidget(titre_section('La fraise en détail'))
+        self.lbl_resume_fraise = QLabel('')
+        self.lbl_resume_fraise.setObjectName('resume')
+        bloc.addWidget(self.lbl_resume_fraise)
+        tete.addLayout(bloc)
+        tete.addStretch(1)
+        self.btn_fraise = QPushButton('préciser')
+        self.btn_fraise.setObjectName('bascule')
+        self.btn_fraise.setCheckable(True)
+        self.btn_fraise.setCursor(Qt.PointingHandCursor)
+        self.btn_fraise.clicked.connect(self._basculer_fraise)
+        tete.addWidget(self.btn_fraise, 0, Qt.AlignTop)
+        v.addLayout(tete)
+
+        self.corps_fraise = QWidget()
+        vf = QVBoxLayout(self.corps_fraise)
+        vf.setContentsMargins(0, 14, 0, 4)
+        vf.setSpacing(14)
+        note = QLabel("Rien de tout ceci ne change les vitesses. C'est ce qui part "
+                      "dans le fichier d'outil FreeCAD.")
+        note.setObjectName('aide')
+        note.setWordWrap(True)
+        vf.addWidget(note)
+
+        # Forme du bout
+        lf = QLabel('Forme du bout')
+        lf.setObjectName('labelChamp')
+        vf.addWidget(lf)
+        ligne_f = QHBoxLayout()
+        ligne_f.setSpacing(8)
+        self.btn_formes = {}
+        for f in C.FORMES:
+            b = QPushButton(f['label'])
+            b.setCheckable(True)
+            b.setObjectName('choix')
+            b.setMinimumHeight(44)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setChecked(f['id'] == self.forme)
+            b.clicked.connect(lambda _=False, i=f['id']: self.choisir_forme(i))
+            self.btn_formes[f['id']] = b
+            ligne_f.addWidget(b)
+        vf.addLayout(ligne_f)
+
+        g = QGridLayout()
+        g.setHorizontalSpacing(14)
+        g.setVerticalSpacing(14)
+        self.f_hcoupe = Champ('Hauteur de coupe', 'mm', 'déduite')
+        self.f_lgtot = Champ('Longueur totale', 'mm', 'déduite')
+        self.f_queue = Champ('Diamètre de queue', 'mm', '= diamètre de coupe')
+        self.f_extra = Champ('Rayon de coin', 'mm', 'déduit')
+        g.addWidget(self.f_hcoupe, 0, 0)
+        g.addWidget(self.f_lgtot, 0, 1)
+        g.addWidget(self.f_queue, 1, 0)
+        g.addWidget(self.f_extra, 1, 1)
+        for f in (self.f_hcoupe, self.f_lgtot, self.f_queue, self.f_extra):
+            f.edit.textEdited.connect(self.recalculer)
+        vf.addLayout(g)
+
+        # Sens de l'hélice
+        lh = QLabel("Sens de l'hélice")
+        lh.setObjectName('labelChamp')
+        vf.addWidget(lh)
+        ligne_h = QHBoxLayout()
+        ligne_h.setSpacing(8)
+        self.btn_helices = {}
+        for h in C.HELICES:
+            b = QPushButton(h['label'])
+            b.setCheckable(True)
+            b.setObjectName('choix')
+            b.setMinimumHeight(44)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setChecked(h['id'] == self.helice)
+            b.clicked.connect(lambda _=False, i=h['id']: self.choisir_helice(i))
+            self.btn_helices[h['id']] = b
+            ligne_h.addWidget(b)
+        vf.addLayout(ligne_h)
+        self.lbl_note_helice = QLabel('')
+        self.lbl_note_helice.setObjectName('aide')
+        self.lbl_note_helice.setWordWrap(True)
+        vf.addWidget(self.lbl_note_helice)
+
+        self.case_plongeant = QCheckBox(
+            "Bout plongeant (fishtail) — peut entrer droit dans la matière")
+        self.case_plongeant.setChecked(True)
+        self.case_plongeant.setCursor(Qt.PointingHandCursor)
+        self.case_plongeant.stateChanged.connect(self.recalculer)
+        vf.addWidget(self.case_plongeant)
+
+        self.corps_fraise.hide()
+        v.addWidget(self.corps_fraise)
+        return carte
+
+    def choisir_forme(self, fid):
+        self.forme = fid
+        self.f_extra.edit.clear()
+        for i, b in self.btn_formes.items():
+            b.setChecked(i == fid)
+        self.recalculer()
+
+    def choisir_helice(self, hid):
+        self.helice = hid
+        for i, b in self.btn_helices.items():
+            b.setChecked(i == hid)
+        self.recalculer()
+
+    def _basculer_fraise(self):
+        ouvert = self.btn_fraise.isChecked()
+        self.corps_fraise.setVisible(ouvert)
+        self.btn_fraise.setText('replier' if ouvert else 'préciser')
 
     def _bloc_calcul(self):
         w = QWidget()
@@ -711,6 +839,26 @@ class Fenetre(QMainWindow):
                ('ae %s mm' % str(r['ae']).replace('.', ',')) if r['ae'] > 0 else 'pleine largeur'))
         self.o_note.setText(r['matiere']['note'])
 
+        # La géométrie : elle ne change aucun chiffre, mais elle avertit.
+        g = C.geometrie(self.f_d.valeur(), self.forme,
+                        self.f_hcoupe.valeur(), self.f_lgtot.valeur(),
+                        self.f_queue.valeur(), self.f_extra.valeur(),
+                        self.f_extra.valeur())
+        self.geo = g
+        extra = g['forme']['extra']
+        self.f_extra.setVisible(bool(extra))
+        if extra:
+            self.f_extra.lbl.setText(
+                '%s  <span style="color:#8b8985">(%s)</span>' % (extra[1], extra[2]))
+        self.lbl_note_helice.setText(C.HELICE_PAR_ID[self.helice]['note'])
+        r['avertissements'] = r['avertissements'] + C.avertissements_fraise(
+            g, self.helice, self.case_plongeant.isChecked(), r['matiere']['ap'])
+        self.lbl_resume_fraise.setText(
+            "%s · coupe %s mm · queue %s mm · %s%s"
+            % (g['forme']['label'].lower(), C.fmt(g['hauteur_coupe'], 1),
+               C.fmt(g['queue'], 2), C.HELICE_PAR_ID[self.helice]['label'].lower(),
+               (" · %d valeur(s) déduite(s)" % len(g['deduit'])) if g['deduit'] else ''))
+
         alerte = bool(r['avertissements'])
         self.o_avert.setText(' '.join(r['avertissements']))
         self.bloc_avert.setVisible(alerte)
@@ -739,6 +887,10 @@ class Fenetre(QMainWindow):
                      plunge=int(round(r['vz'])),
                      rapidH=int(round(C.num(self.f_rapidh.valeur(), 8000))),
                      rapidV=int(round(C.num(self.f_rapidv.valeur(), 2700))),
+                     forme=self.forme, helice=self.helice,
+                     plongeant=self.case_plongeant.isChecked(),
+                     hcoupe=self.f_hcoupe.valeur(), lgtotale=self.f_lgtot.valeur(),
+                     queue=self.f_queue.valeur(), extra=self.f_extra.valeur(),
                      sub="%s tr/min · %s mm/min" % (C.fmt(r['n']), C.fmt(r['vf'])))
         for i, o in enumerate(self.bibliotheque):
             if o['name'] == nom:
@@ -773,6 +925,18 @@ class Fenetre(QMainWindow):
         # `ae` fait partie de l'outil : sans lui, un outil enregistré en
         # reprise de contour se rouvrirait avec l'avance de la pleine largeur.
         self.f_ae.edit.setText(str(o.get('ae', '') or ''))
+        # La géométrie suit l'outil : sans elle, le fichier FreeCAD
+        # redeviendrait une fraise déduite du seul diamètre.
+        self.forme = o.get('forme', 'plat')
+        self.helice = o.get('helice', 'montante')
+        self.case_plongeant.setChecked(o.get('plongeant', True))
+        for cle, champ in (('hcoupe', self.f_hcoupe), ('lgtotale', self.f_lgtot),
+                           ('queue', self.f_queue), ('extra', self.f_extra)):
+            champ.edit.setText(str(o.get(cle, '') or ''))
+        for i, b in self.btn_formes.items():
+            b.setChecked(i == self.forme)
+        for i, b in self.btn_helices.items():
+            b.setChecked(i == self.helice)
         self.f_vf.edit.clear()
         self.mode = 'avance'
         for c, b in self.btn_modes.items():
@@ -833,18 +997,16 @@ class Fenetre(QMainWindow):
                                     "Choisir d'abord un outil dans la bibliothèque.")
             return
         o = it.data(Qt.UserRole)
-        d = C.num(o.get('d'), 6)
-        contenu = json.dumps({
-            'version': 2, 'name': o['name'], 'shape': 'endmill.fcstd',
-            'parameter': {
-                'Diameter': '%s mm' % d,
-                'Flutes': max(1, round(C.num(o.get('z'), 2))),
-                'Chipload': '%s mm' % C.num(o.get('fz'), 0),
-                'CuttingEdgeHeight': '%.2f mm' % (d * 3),
-                'Length': '%.2f mm' % (d * 8),
-                'ShankDiameter': '%s mm' % d,
-                'Material': 'Carbide'},
-            'attribute': {}}, ensure_ascii=False, indent=2)
+        # Le fichier décrit la fraise TELLE QU'ELLE EST quand on l'a
+        # renseignée — le noyau porte cette construction, partagée avec
+        # l'appli web.
+        g = C.geometrie(o.get('d'), o.get('forme', 'plat'), o.get('hcoupe'),
+                        o.get('lgtotale'), o.get('queue'), o.get('extra'),
+                        o.get('extra'))
+        contenu = json.dumps(
+            C.fichier_outil(o['name'], g, o.get('z'), C.num(o.get('fz'), 0),
+                            o.get('helice', 'montante'), o.get('plongeant', True)),
+            ensure_ascii=False, indent=2)
         defaut = ''.join(ch if ch.isalnum() else '_' for ch in o['name']) + '.fctb'
         chemin, _ = QFileDialog.getSaveFileName(
             self, "Enregistrer le fichier d'outil FreeCAD", defaut,
