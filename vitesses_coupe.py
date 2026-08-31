@@ -587,7 +587,8 @@ class Fenetre(QMainWindow):
         actions.setSpacing(8)
         for txt, fn in (('Charger', self._charger_selection),
                         ('Supprimer', self._supprimer_selection),
-                        ('Exporter .fctb…', self._exporter_fctb)):
+                        ('.fctb…', self._exporter_fctb),
+                        ('Export JSON…', self._exporter_json)):
             bb = QPushButton(txt)
             bb.setObjectName('mini')
             bb.setMinimumHeight(34)
@@ -786,6 +787,44 @@ class Fenetre(QMainWindow):
             del self.bibliotheque[i]
             self._rendre_biblio()
             self._sauver_reglages()
+
+    def _exporter_json(self):
+        """Écrit toute la bibliothèque, telle que la macro FreeCAD l'attend.
+
+        C'est ce fichier — et non le .fctb — que `macro_tool_controller.py`
+        lit pour remplir un Tool Controller : le .fctb porte la géométrie de
+        la fraise, jamais les vitesses. Même nom par défaut que l'appli web,
+        pour que la macro le retrouve sans qu'on ait à chercher.
+        """
+        if not self.bibliotheque:
+            QMessageBox.information(self, APP_NOM,
+                                    "La bibliothèque est vide : enregistrer "
+                                    "d'abord au moins un outil.")
+            return
+        depart = Path.home() / 'Téléchargements'
+        if not depart.is_dir():
+            depart = Path.home() / 'Downloads'
+        if not depart.is_dir():
+            depart = Path.home()
+        chemin, _ = QFileDialog.getSaveFileName(
+            self, "Exporter la bibliothèque d'outils",
+            str(depart / 'outils-vitesses-coupe.json'),
+            "Bibliothèque d'outils (*.json)")
+        if not chemin:
+            return
+        try:
+            Path(chemin).write_text(
+                json.dumps(self.bibliotheque, ensure_ascii=False, indent=2) + '\n',
+                encoding='utf-8')
+        except OSError as e:
+            QMessageBox.critical(self, APP_NOM, "Écriture impossible :\n%s" % e)
+            return
+        QMessageBox.information(
+            self, APP_NOM,
+            "%d outil(s) écrits dans :\n%s\n\nDans FreeCAD : Macro → "
+            "macro_tool_controller.py, qui lira ce fichier et posera les cinq "
+            "vitesses sur le Tool Controller du Job."
+            % (len(self.bibliotheque), chemin))
 
     def _exporter_fctb(self):
         it = self.liste.currentItem()

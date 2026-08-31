@@ -54,8 +54,13 @@ du Job, qui naît donc à zéro. Deux façons de le remplir :
 
 * **à la main** — l'appli affiche les cinq valeurs à recopier ;
 * **avec la macro** — `macro_tool_controller.py`, à copier dans le dossier des
-  macros FreeCAD. Elle lit la bibliothèque exportée (`outils-vitesses-coupe.json`),
-  demande quel outil et quel contrôleur, et pose les cinq valeurs.
+  macros FreeCAD. Elle lit la bibliothèque exportée, demande quel outil et quel
+  contrôleur, et pose les cinq valeurs.
+
+Le fichier qu'elle attend s'obtient par **Export JSON…**, sous la bibliothèque
+(l'appli web a le même bouton dans son panneau « Exporter »). C'est bien ce
+fichier-là qu'il faut, pas le `.fctb` : le `.fctb` décrit la fraise, le JSON
+porte les vitesses.
 
 > **Le piège que la macro évite.** Les propriétés `HorizFeed`, `VertFeed`,
 > `HorizRapid` et `VertRapid` sont stockées en **mm/s** alors que l'interface
