@@ -40,6 +40,7 @@ copeau en reprise de contour, les **réglages machine** repliés, une
 | `importer_outil_coupe.FCMacro` | **le bouton de l'atelier CAM** : crée la fraise, son Tool Controller et pose les vitesses |
 | `icone_outil_coupe.svg` | l'icône de ce bouton |
 | `macro_tool_controller.py` | macro plus ancienne : remplit un Tool Controller **existant** |
+| `freecad_biblio.py` | lit et écrit les bibliothèques d'outils de FreeCAD, **sans dépendre de FreeCAD** |
 
 **Le noyau est partagé avec l'appli web du site**, qui en porte une
 traduction JavaScript ligne pour ligne. Les valeurs de référence des tests ne
@@ -109,6 +110,29 @@ Les deux **rapides** ne sortent pas du calcul : ce sont des vitesses de
 transport, propres à la machine. Elles se règlent dans le panneau « Machine »
 et se lisent dans la configuration LinuxCNC (`MAX_VELOCITY` de chaque axe, en
 mm/s — à multiplier par 60).
+
+## L'aller-retour avec les bibliothèques FreeCAD
+
+Deux boutons sous la bibliothèque :
+
+* **↓ Lire FreeCAD…** — reprendre un outil d'une bibliothèque existante. La
+  géométrie vient de FreeCAD ; les vitesses reviennent aussi **si l'appli les
+  connaît**, sinon elle les calcule pour la matière choisie.
+* **↑ Écrire dans FreeCAD…** — poser l'outil dans une bibliothèque. Il apparaît
+  alors dans le Gestionnaire de bibliothèque, et le Job peut s'en servir.
+
+> **Pourquoi les vitesses vivent à côté.** Un `.fctb` a bien un champ libre, et
+> l'on pourrait croire qu'il suffit d'y ranger broche et avance. Mesuré sur
+> FreeCAD 1.1.3 : **il le vide** dès qu'il réécrit l'outil, sans message. Les
+> vitesses sont donc gardées par l'appli dans
+> `~/.config/vitesses-coupe/vitesses-freecad.json`, rattachées au **nom du
+> fichier** `.fctb` — le seul point fixe qui survive à un aller-retour.
+
+> **Le dossier de FreeCAD est versionné**, et plusieurs versions cohabitent
+> presque toujours (`v1-1`, `v1-2`, `v26-3`…). Deviner lequel est le bon est un
+> piège : trier par date de modification désignait ici la version de
+> développement alors que la machine tourne sur la stable. L'appli fait donc
+> choisir, en montrant combien d'outils chacun contient, et retient la réponse.
 
 ## Raccourcis
 

@@ -23,11 +23,13 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QFont, QFontDatabase, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QFileDialog, QFrame, QGridLayout,
-    QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
-    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
+    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSizePolicy,
+    QVBoxLayout, QWidget)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import coupe_noyau as C
+import freecad_biblio as FB
 
 APP_NOM = "Vitesses de coupe"
 VERSION = "1.0.0"
@@ -161,6 +163,8 @@ class Fenetre(QMainWindow):
         self.forme = 'plat'
         self.helice = 'montante'
         self.bibliotheque = []
+        self.dossier_fc = ''      # l'installation FreeCAD choisie
+        self.fichier_fc = ''      # le .fctb d'où vient l'outil courant
         self.mono = police_mono()
         self.sans = police_texte()
 
@@ -725,7 +729,177 @@ class Fenetre(QMainWindow):
             actions.addWidget(bb)
         v.addSpacing(10)
         v.addLayout(actions)
+
+        echanges = QHBoxLayout()
+        echanges.setSpacing(8)
+        for txt, fn in (('↓ Lire FreeCAD…', self._importer_freecad),
+                        ('↑ Écrire dans FreeCAD…', self._exporter_freecad)):
+            bb = QPushButton(txt)
+            bb.setObjectName('mini')
+            bb.setMinimumHeight(34)
+            bb.setCursor(Qt.PointingHandCursor)
+            bb.clicked.connect(fn)
+            echanges.addWidget(bb)
+        v.addSpacing(8)
+        v.addLayout(echanges)
         return carte
+
+    # ------------------------------------------- aller-retour avec FreeCAD
+    def _dossier_freecad(self):
+        """Le dossier d'outils de FreeCAD, choisi une fois puis mémorisé.
+
+        Il est VERSIONNÉ et plusieurs versions cohabitent : deviner lequel
+        est le bon est un piège — trier par date désignait ici la version de
+        développement alors que la machine tourne sur la stable. On fait
+        donc choisir, en montrant combien d'outils chacun contient.
+        """
+        dossiers = FB.dossiers_outils()
+        if not dossiers:
+            QMessageBox.information(
+                self, APP_NOM,
+                "Aucune bibliothèque d'outils FreeCAD trouvée.\n\n"
+                "Attendu quelque part comme :\n"
+                "  ~/.local/share/FreeCAD/v1-1/CamAssets/Tools")
+            return None
+        if self.dossier_fc:
+            for d in dossiers:
+                if str(d['chemin']) == self.dossier_fc:
+                    return d
+        if len(dossiers) == 1:
+            self.dossier_fc = str(dossiers[0]['chemin'])
+            return dossiers[0]
+        noms = ['%s  —  %d outils, %d bibliothèque(s)'
+                % (d['version'], d['nb_outils'], d['nb_biblio']) for d in dossiers]
+        choix, ok = QInputDialog.getItem(
+            self, APP_NOM, "Quelle installation de FreeCAD ?", noms, 0, False)
+        if not ok:
+            return None
+        d = dossiers[noms.index(choix)]
+        self.dossier_fc = str(d['chemin'])
+        self._sauver_reglages()
+        return d
+
+    def _importer_freecad(self):
+        """Reprendre un outil de FreeCAD, avec ses vitesses si on les connaît."""
+        d = self._dossier_freecad()
+        if d is None:
+            return
+        libs = FB.bibliotheques(d['chemin'])
+        if not libs:
+            QMessageBox.information(self, APP_NOM, "Aucune bibliothèque dans %s."
+                                    % d['version'])
+            return
+        noms = ['%s  (%d outils)' % (b['label'], len(b['outils'])) for b in libs]
+        choix, ok = QInputDialog.getItem(self, APP_NOM, "Quelle bibliothèque ?",
+                                         noms, 0, False)
+        if not ok:
+            return
+        lib = libs[noms.index(choix)]
+        outils = FB.outils_de(d['chemin'], lib)
+        if not outils:
+            QMessageBox.information(self, APP_NOM, "Cette bibliothèque est vide.")
+            return
+        connues = FB.vitesses_connues()
+        etiquettes = []
+        for o in outils:
+            v = connues.get(o['fichier'])
+            etiquettes.append('%s  —  Ø%g, %d dents%s'
+                              % (o['name'], o['d'], o['z'],
+                                 '  (vitesses connues)' if v else ''))
+        choix, ok = QInputDialog.getItem(self, APP_NOM, "Quel outil reprendre ?",
+                                         etiquettes, 0, False)
+        if not ok:
+            return
+        o = outils[etiquettes.index(choix)]
+        v = connues.get(o['fichier']) or {}
+
+        # La géométrie vient de FreeCAD ; les vitesses, de nous — et si on ne
+        # les connaît pas, l'appli les recalcule depuis la matière.
+        self.f_d.edit.setText(('%g' % o['d']).replace('.', ','))
+        self.f_z.edit.setText(str(o['z']))
+        self.forme = o.get('forme', 'plat')
+        for i, b in self.btn_formes.items():
+            b.setChecked(i == self.forme)
+        for cle, champ in (('hcoupe', self.f_hcoupe), ('lgtotale', self.f_lgtot),
+                           ('queue', self.f_queue), ('extra', self.f_extra)):
+            val = o.get(cle)
+            champ.edit.setText(('%g' % val).replace('.', ',') if val else '')
+        if v.get('mat'):
+            self.mat = v['mat']
+            for b in self.grp_mat.buttons():
+                b.setChecked(b.text() == C.matiere(self.mat)['label'])
+        self.helice = v.get('helice', 'montante')
+        for i, b in self.btn_helices.items():
+            b.setChecked(i == self.helice)
+        self.case_plongeant.setChecked(v.get('plongeant', True))
+        self.f_ae.edit.setText(str(v.get('ae', '') or ''))
+        self.f_n.edit.setText(str(v.get('n', '') or ''))
+        self.f_fz.edit.setText(str(o.get('fz', '') or '').replace('.', ','))
+        self.f_vf.edit.clear()
+        self.mode = 'avance'
+        for c, b in self.btn_modes.items():
+            b.setChecked(c == 'avance')
+        self.e_nom.setText(o['name'])
+        self.fichier_fc = o['fichier']
+        self.recalculer()
+        QMessageBox.information(
+            self, APP_NOM,
+            "« %s » repris de « %s ».\n\n%s"
+            % (o['name'], lib['label'],
+               "Ses vitesses étaient connues, elles sont revenues avec lui."
+               if v else "FreeCAD ne garde pas les vitesses : celles-ci sont "
+                         "calculées pour la matière choisie. Enregistrer l'outil "
+                         "puis « Écrire dans FreeCAD » pour qu'elles soient "
+                         "retenues."))
+
+    def _exporter_freecad(self):
+        """Écrire l'outil courant dans une bibliothèque FreeCAD."""
+        it = self.liste.currentItem()
+        if it is None:
+            QMessageBox.information(self, APP_NOM,
+                                    "Choisir d'abord un outil dans la bibliothèque.")
+            return
+        o = it.data(Qt.UserRole)
+        d = self._dossier_freecad()
+        if d is None:
+            return
+        libs = FB.bibliotheques(d['chemin'])
+        noms = ['%s  (%d outils)' % (b['label'], len(b['outils'])) for b in libs] \
+            + ['— dans le magasin seulement, sans bibliothèque —']
+        choix, ok = QInputDialog.getItem(self, APP_NOM, "Dans quelle bibliothèque ?",
+                                         noms, 0, False)
+        if not ok:
+            return
+        idx = noms.index(choix)
+        lib = libs[idx] if idx < len(libs) else None
+
+        g = C.geometrie(o.get('d'), o.get('forme', 'plat'), o.get('hcoupe'),
+                        o.get('lgtotale'), o.get('queue'), o.get('extra'),
+                        o.get('extra'))
+        fichier = C.fichier_outil(o['name'], g, o.get('z'), C.num(o.get('fz'), 0),
+                                  o.get('helice', 'montante'),
+                                  o.get('plongeant', True))
+        # Les vitesses ne tiennent PAS dans le .fctb : FreeCAD vide son champ
+        # libre dès qu'il le réécrit. On les garde donc à côté, rattachées au
+        # nom du fichier.
+        vitesses = {k: o.get(k) for k in
+                    ('n', 'vf', 'plunge', 'rapidH', 'rapidV', 'ae', 'fz')}
+        vitesses['mat'] = o.get('mat')
+        vitesses['helice'] = o.get('helice', 'montante')
+        vitesses['plongeant'] = o.get('plongeant', True)
+        try:
+            nom_fichier = FB.ecrire_outil(d['chemin'], fichier, lib, vitesses)
+        except OSError as e:
+            QMessageBox.critical(self, APP_NOM, "Écriture impossible :\n%s" % e)
+            return
+        QMessageBox.information(
+            self, APP_NOM,
+            "« %s » est dans FreeCAD (%s).\n\nFichier : %s\n%s\n\n"
+            "Ses vitesses sont retenues ici, hors des fichiers de FreeCAD, "
+            "qui ne sait pas les garder."
+            % (o['name'], d['version'], nom_fichier,
+               ('Bibliothèque : ' + lib['label']) if lib else
+               'Rangé dans le magasin, sans bibliothèque.'))
 
     # ------------------------------------------------------------ actions
     def choisir_matiere(self, mid):
@@ -1035,6 +1209,7 @@ class Fenetre(QMainWindow):
                             'plunge': self.f_plunge.valeur(), 'vfMax': self.f_vfmax.valeur(),
                             'rapidH': self.f_rapidh.valeur(), 'rapidV': self.f_rapidv.valeur()},
                 'bibliotheque': self.bibliotheque,
+                'dossier_freecad': self.dossier_fc,
             }, ensure_ascii=False, indent=2), encoding='utf-8')
         except OSError:
             pass          # une appli de calcul ne doit pas mourir d'un disque plein
@@ -1055,6 +1230,7 @@ class Fenetre(QMainWindow):
             if m.get(cle):
                 champ.edit.setText(str(m[cle]))
         self.bibliotheque = d.get('bibliotheque') or []
+        self.dossier_fc = d.get('dossier_freecad') or ''
         self._rendre_biblio()
 
     # ------------------------------------------------------------ thème
