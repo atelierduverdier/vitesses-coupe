@@ -70,3 +70,10 @@ Et l'avance calculée n'est pas toujours tenable : une PrintNC décroche
 au-delà de 600 à 800 mm/min dans les courbes. C'est à ça que sert le champ
 **Avance max** — l'appli avertit alors et propose la broche qui garde le
 copeau sous ce plafond.
+
+## Licence
+
+**LGPL-2.1-or-later**, comme [LaserAtelier](https://github.com/atelierduverdier/LaserAtelier).
+Voir [`LICENSE`](LICENSE).
+
+© Atelier du Verdier

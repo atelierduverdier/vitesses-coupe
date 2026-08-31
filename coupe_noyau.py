@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # =========================================================================
 # coupe_noyau.py — le calcul des vitesses de coupe, sans interface
+# © Atelier du Verdier — licence LGPL-2.1-or-later (cf. LICENSE).
 # =========================================================================
 # Ce module ne connaît ni Qt ni le web : il porte les MATIÈRES et les
 # FORMULES, et rien d'autre. Les deux interfaces (l'appli web du site et

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # =========================================================================
 # vitesses_coupe.py — l'appli de bureau, en PySide6
+# © Atelier du Verdier — licence LGPL-2.1-or-later (cf. LICENSE).
 # =========================================================================
 # Même calcul que l'appli web du site (atelierduverdier.fr/coupe/) : les
 # deux appellent `coupe_noyau`, qui porte les matières et les formules.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # =========================================================================
 # tests_noyau.py — le calcul rend-il les nombres attendus ?
+# © Atelier du Verdier — licence LGPL-2.1-or-later (cf. LICENSE).
 # =========================================================================
 # Les valeurs de référence ne sont PAS recopiées de ce module : elles
 # viennent des captures du dossier de remise (`screens/bureau.png`, qui
