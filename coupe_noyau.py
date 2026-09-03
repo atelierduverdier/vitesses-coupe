@@ -141,7 +141,11 @@ def calculer(mat='bois-tendre', d='6', z='2', mode='avance',
 
     avertissements = []
     if vf_v > vf_max:
-        cible = round(vf_max / (z * fz_eff) / 500) * 500 if fz_eff else 0
+        # Arrondi vers le BAS : au demi-millier le plus proche, la broche
+        # proposée pouvait encore dépasser le plafond (fz 0,13, plafond
+        # 1 500 : « viser 6 000 » donnait 1 560). On ne descend pas sous 500.
+        cible = (max(500, math.floor(vf_max / (z * fz_eff) / 500) * 500)
+                 if fz_eff else 0)
         avertissements.append(
             "Vf calculée %s > plafond machine %s mm/min. Viser %s tr/min pour "
             "garder le copeau." % (fmt(vf_v), fmt(vf_max), fmt(cible)))

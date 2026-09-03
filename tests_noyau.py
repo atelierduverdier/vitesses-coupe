@@ -78,6 +78,11 @@ print("\n--- Les avertissements ---")
 r = C.calculer('bois-tendre', '6', '2', vf_max='1500')
 verifier("plafond dépassé → un avertissement",
          any('plafond' in a for a in r['avertissements']), True)
+# La broche à viser doit TENIR sous le plafond : arrondie au plus proche,
+# elle proposait 6 000 tr/min pour un plafond de 1 500 — soit 1 560.
+r = C.calculer('bois-tendre', '6', '2', fz='0,13', vf_max='1500')
+verifier("la broche à viser tient sous le plafond (5 500, pas 6 000)",
+         any('Viser 5 500' in a for a in r['avertissements']), True)
 r = C.calculer('bois-tendre', '6', '2', vf_max='99999')
 verifier("plafond large → aucun avertissement de plafond",
          any('plafond' in a for a in r['avertissements']), False)
