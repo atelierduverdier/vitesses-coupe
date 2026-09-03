@@ -36,14 +36,16 @@ copeau en reprise de contour, les **réglages machine** repliés, une
 |---|---|
 | `coupe_noyau.py` | les matières et les formules. Ni Qt ni web — la couche qu'on teste. |
 | `vitesses_coupe.py` | l'interface PySide6. |
-| `tests_noyau.py` | 38 contrôles sur le calcul : `python3 tests_noyau.py` |
+| `tests_noyau.py` | 61 contrôles sur le calcul : `python3 tests_noyau.py` |
+| `tests_interface.py` | l'interface fait-elle ce que le noyau calcule ? Sans écran, sur une configuration jetable : `python3 tests_interface.py` |
 | `carnet_noyau.py` | **le carnet d'essais** : la théorie calcule, le carnet retient ce que la matière a répondu. Ni Qt ni web. |
 | `carnet_ui.py` | l'interface du carnet — consulter, noter, compléter, supprimer. PySide6, greffée sur `vitesses_coupe.py`. |
 | `tests_carnet.py` | les contrôles du carnet : `python3 tests_carnet.py` |
 | `importer_outil_coupe.FCMacro` | **le bouton de l'atelier CAM** : crée la fraise, son Tool Controller et pose les vitesses |
 | `icone_outil_coupe.svg` | l'icône de ce bouton |
-| `macro_tool_controller.py` | macro plus ancienne : remplit un Tool Controller **existant** |
+| `macro_tool_controller.py` | macro plus ancienne : remplit un Tool Controller **existant** depuis le fichier d'« Export JSON… » |
 | `freecad_biblio.py` | lit et écrit les bibliothèques d'outils de FreeCAD, **sans dépendre de FreeCAD** |
+| `tests_biblio.py` | les contrôles de cet aller-retour, sur ce que FreeCAD 1.1.3 écrit vraiment : `python3 tests_biblio.py` |
 
 **Le noyau est partagé avec l'appli web du site**, qui en porte une
 traduction JavaScript ligne pour ligne. Les valeurs de référence des tests ne
@@ -89,10 +91,10 @@ du Job, qui naît donc à zéro. Deux façons de le remplir :
 
 Le bouton n'apparaît alors que dans l'atelier CAM.
 
-Le fichier qu'elle attend s'obtient par **Export JSON…**, sous la bibliothèque
-(l'appli web a le même bouton dans son panneau « Exporter »). C'est bien ce
-fichier-là qu'il faut, pas le `.fctb` : le `.fctb` décrit la fraise, le JSON
-porte les vitesses.
+Le bouton n'a besoin d'**aucun fichier exporté** : il lit la bibliothèque de
+FreeCAD et les vitesses que l'appli a retenues à côté
+(`~/.config/vitesses-coupe/vitesses-freecad.json`). **Export JSON…**, sous la
+bibliothèque, ne sert plus qu'à l'ancienne macro.
 
 > **Deux pièges que le bouton évite**, mesurés sur FreeCAD 1.1.3.
 >
@@ -130,10 +132,13 @@ Deux boutons sous la bibliothèque :
 |---|---|
 | 1 | matière, diamètre, dents — et le détail de la fraise si on l'a |
 | 2 | **↑ Écrire dans FreeCAD…** : la fraise et ses vitesses sont liées |
-| 3 | **Export JSON…** puis le bouton CAM : le Job reçoit les cinq valeurs |
+| 3 | dans FreeCAD, le bouton CAM : le Job reçoit la fraise **et** ses cinq valeurs |
 
-Les étapes 2 et 3 sont indépendantes : la première sert à retrouver ses
-réglages plus tard, la seconde à les poser dans un Job précis.
+L'étape 3 s'appuie sur la 2 : c'est en écrivant dans FreeCAD que les vitesses
+sont retenues, et c'est là que le bouton va les chercher. Si deux outils
+différents se disputent le même nom de fichier — « Essai · Ø6,35 » et
+« Essai - Ø6.35 » y arrivent tous deux — le second est numéroté (`_2`) plutôt
+que d'écraser le premier ; seul un outil du **même nom** réécrit son fichier.
 
 > **Pourquoi les vitesses vivent à côté.** Un `.fctb` a bien un champ libre, et
 > l'on pourrait croire qu'il suffit d'y ranger broche et avance. Mesuré sur
@@ -189,6 +194,13 @@ Elles viennent de tables constructeur pour fraise carbure sur portique
 amateur, **pas de mesures faites sur cette machine**. Le vrai juge est le
 copeau : s'il sort en filaments souples et que le bois ne noircit pas, c'est
 bon ; s'il sort en poussière et que ça fume, la fraise frotte.
+
+Les champs broche et copeau affichent le **conseillé** tant qu'on n'y a rien
+tapé, et le suivent quand le diamètre, les dents ou la matière changent. Une
+valeur **tapée**, elle, tient jusqu'au ↻ ou jusqu'à un changement de matière
+ou de sens de calcul — c'est la règle de l'appli web, et l'appli de bureau
+l'a longtemps manquée : elle relisait le conseillé posé comme une saisie, et
+changer le diamètre ne changeait plus rien (corrigé le 03/09/2026).
 
 Et l'avance calculée n'est pas toujours tenable : une PrintNC décroche
 au-delà de 600 à 800 mm/min dans les courbes. C'est à ça que sert le champ
