@@ -215,7 +215,10 @@ def _copier_photo(essai, source, dossier=None):
     photos = Path(dossier or DOSSIER_DEFAUT) / SOUS_DOSSIER_PHOTOS
     photos.mkdir(parents=True, exist_ok=True)
     nom = essai['id'] + source.suffix.lower()
-    shutil.copy2(source, photos / nom)
+    # Rechoisir la photo déjà dans le carnet — le formulaire la propose,
+    # elle est sous les yeux — levait SameFileError : rien à copier alors.
+    if source.resolve() != (photos / nom).resolve():
+        shutil.copy2(source, photos / nom)
     ancien = essai.get('photo')
     if ancien and ancien != nom and (photos / ancien).is_file():
         (photos / ancien).unlink()

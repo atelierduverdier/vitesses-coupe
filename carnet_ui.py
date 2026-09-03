@@ -30,7 +30,7 @@ import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QImageReader, QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
@@ -129,6 +129,20 @@ def _libelle_matiere(essai):
     if m:
         return m['label']
     return 'matière non précisée'
+
+
+def _filtre_images():
+    """Le filtre du sélecteur de photo, bâti sur ce que Qt SAIT lire.
+
+    Le filtre proposait `*.heic` alors que QPixmap ne le décode pas sans
+    greffon : la photo du téléphone arrivait « illisible ». On ne propose
+    donc que les formats que cette installation décode vraiment.
+    """
+    sus = {bytes(f).decode('ascii', 'ignore').lower()
+           for f in QImageReader.supportedImageFormats()}
+    retenus = [f for f in ('jpg', 'jpeg', 'png', 'webp', 'heic', 'heif',
+                           'avif', 'tif', 'tiff', 'bmp') if f in sus]
+    return 'Images (%s)' % ' '.join('*.%s *.%s' % (f, f.upper()) for f in retenus)
 
 
 def _juge_copeau(pc):
@@ -313,8 +327,7 @@ class FormulaireEssai(QDialog):
 
     def _choisir_photo(self):
         chemin, _ = QFileDialog.getOpenFileName(
-            self, 'Choisir une photo', str(Path.home()),
-            'Images (*.jpg *.jpeg *.png *.webp *.heic *.JPG *.JPEG *.PNG)')
+            self, 'Choisir une photo', str(Path.home()), _filtre_images())
         if not chemin:
             return
         self.photo_choisie = chemin
@@ -340,7 +353,7 @@ class FormulaireEssai(QDialog):
                 self.resultat = K.completer(
                     self.essai_existant['id'], photo=self.photo_choisie,
                     dossier=self.dossier, **champs)
-        except (ValueError, KeyError) as e:
+        except (ValueError, KeyError, OSError) as e:
             QMessageBox.warning(self, self.windowTitle(), str(e))
             return
         self.accept()
@@ -540,7 +553,7 @@ class FenetreCarnet(QDialog):
         try:
             self.essais = K.charger(self.dossier)
             self.erreur = None
-        except ValueError as e:
+        except (ValueError, OSError) as e:      # abîmé, ou pas lisible
             self.essais = []
             self.erreur = str(e)
         self._rafraichir_liste()
@@ -702,6 +715,6 @@ class FenetreCarnet(QDialog):
             return
         try:
             K.supprimer(e['id'], dossier=self.dossier)
-        except (ValueError, KeyError) as exc:
+        except (ValueError, KeyError, OSError) as exc:
             QMessageBox.critical(self, "Carnet d'essais", str(exc))
         self._charger()
