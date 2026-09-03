@@ -38,6 +38,7 @@ copeau en reprise de contour, les **réglages machine** repliés, une
 | `vitesses_coupe.py` | l'interface PySide6. |
 | `tests_noyau.py` | 61 contrôles sur le calcul : `python3 tests_noyau.py` |
 | `tests_interface.py` | l'interface fait-elle ce que le noyau calcule ? Sans écran, sur une configuration jetable : `python3 tests_interface.py` |
+| `tests_jumeau_web.py` | l'appli web du site calcule-t-elle pareil ? Son JavaScript rejoué sous `node` sur 8 505 combinaisons, zéro écart exigé : `python3 tests_jumeau_web.py` |
 | `carnet_noyau.py` | **le carnet d'essais** : la théorie calcule, le carnet retient ce que la matière a répondu. Ni Qt ni web. |
 | `carnet_ui.py` | l'interface du carnet — consulter, noter, compléter, supprimer. PySide6, greffée sur `vitesses_coupe.py`. |
 | `tests_carnet.py` | les contrôles du carnet : `python3 tests_carnet.py` |
