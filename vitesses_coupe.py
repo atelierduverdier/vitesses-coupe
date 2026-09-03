@@ -33,7 +33,7 @@ import freecad_biblio as FB
 import carnet_ui as CU
 
 APP_NOM = "Vitesses de coupe"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # Les réglages et la bibliothèque vivent à côté des autres configurations
 # de l'utilisateur, pas dans le dossier du programme : celui-ci peut être
@@ -97,7 +97,16 @@ def police_texte():
 #  Petits composants
 # =========================================================================
 class Champ(QWidget):
-    """Un libellé, un champ de saisie, une ligne d'aide dessous."""
+    """Un libellé, un champ de saisie, une ligne d'aide dessous.
+
+    `saisi` est ce que l'UTILISATEUR a tapé — l'état. Ce qui s'affiche peut
+    être autre chose : le conseillé, posé par l'appli quand rien n'est
+    saisi. Confondre les deux a coûté un vrai défaut, vu le 03/09/2026 :
+    l'appli posait « 21000 » dans la broche, puis relisait le champ comme
+    une saisie — changer le diamètre ne changeait plus rien, il fallait
+    cliquer ↻ deux fois. L'appli web, elle, garde l'état à part (`S.n`) et
+    n'affiche le conseillé qu'à l'écran ; on fait pareil ici.
+    """
 
     def __init__(self, libelle, unite='', place='', parent=None):
         super().__init__(parent)
@@ -114,18 +123,41 @@ class Champ(QWidget):
         self.aide = QLabel('')
         self.aide.setObjectName('aide')
         self.aide.setWordWrap(True)
+        self.saisi = ''
+        # Branché AVANT tout `recalculer` : les signaux partent dans l'ordre
+        # des connexions, l'état doit être à jour quand le calcul le lit.
+        self.edit.textEdited.connect(self._noter_saisie)
         v.addWidget(self.lbl)
         v.addSpacing(7)
         v.addWidget(self.edit)
         v.addSpacing(6)
         v.addWidget(self.aide)
 
+    def _noter_saisie(self, texte):
+        self.saisi = texte
+
     def valeur(self):
         return self.edit.text()
 
+    def saisir(self, texte):
+        """Pose une valeur COMME si l'utilisateur l'avait tapée : elle
+        devient l'état, et le calcul la suivra."""
+        self.saisi = texte
+        self.edit.setText(texte)
+
+    def effacer(self):
+        """Plus rien de saisi : le champ suivra de nouveau le conseillé."""
+        self.saisi = ''
+        self.edit.clear()
+
     def poser(self, texte):
-        """Écrit sans déclencher l'édition, et sans voler le curseur."""
-        if self.edit.hasFocus():
+        """Écrit sans déclencher l'édition, et sans voler le curseur.
+
+        Un champ DÉDUIT est en lecture seule : le curseur peut s'y trouver
+        sans que personne n'y tape, on l'écrit quand même — sinon cliquer
+        dans la broche calculée figeait son affichage.
+        """
+        if self.edit.hasFocus() and not self.edit.isReadOnly():
             return
         b = self.edit.blockSignals(True)
         self.edit.setText(texte)
@@ -169,6 +201,12 @@ class Fenetre(QMainWindow):
         self.fen_carnet = None    # le carnet d'essais, ouvert à la demande
         self.mono = police_mono()
         self.sans = police_texte()
+        # Les réglages ne s'écrivent pas à chaque caractère tapé : on attend
+        # que la frappe se calme. `closeEvent` vide la minuterie.
+        self._minuterie_sauvegarde = QTimer(self)
+        self._minuterie_sauvegarde.setSingleShot(True)
+        self._minuterie_sauvegarde.setInterval(400)
+        self._minuterie_sauvegarde.timeout.connect(self._sauver_reglages)
 
         self._construire()
         self._charger_reglages()
@@ -488,7 +526,7 @@ class Fenetre(QMainWindow):
         self.btn_reset_n.setMinimumHeight(52)
         self.btn_reset_n.setToolTip('Revenir au conseillé')
         self.btn_reset_n.setCursor(Qt.PointingHandCursor)
-        self.btn_reset_n.clicked.connect(lambda: (self.f_n.edit.clear(), self.recalculer()))
+        self.btn_reset_n.clicked.connect(lambda: (self.f_n.effacer(), self.recalculer()))
         ligne_n.addWidget(self.btn_reset_n)
         bloc_n.addWidget(self.f_n.lbl)
         bloc_n.addSpacing(7)
@@ -508,7 +546,7 @@ class Fenetre(QMainWindow):
         self.btn_reset_fz.setMinimumHeight(52)
         self.btn_reset_fz.setToolTip('Revenir au conseillé')
         self.btn_reset_fz.setCursor(Qt.PointingHandCursor)
-        self.btn_reset_fz.clicked.connect(lambda: (self.f_fz.edit.clear(), self.recalculer()))
+        self.btn_reset_fz.clicked.connect(lambda: (self.f_fz.effacer(), self.recalculer()))
         ligne_fz.addWidget(self.btn_reset_fz)
         bloc_fz.addWidget(self.f_fz.lbl)
         bloc_fz.addSpacing(7)
@@ -525,6 +563,9 @@ class Fenetre(QMainWindow):
         v.addWidget(self.f_vf)
         for f in (self.f_n, self.f_fz, self.f_vf):
             f.edit.textEdited.connect(self.recalculer)
+            # Un champ vidé puis quitté reprend le conseillé : `poser` ne
+            # touche pas à un champ éditable qui a le focus.
+            f.edit.editingFinished.connect(self.recalculer)
         return w
 
     def _bloc_largeur(self):
@@ -856,9 +897,9 @@ class Fenetre(QMainWindow):
             b.setChecked(i == self.helice)
         self.case_plongeant.setChecked(v.get('plongeant', True))
         self.f_ae.edit.setText(str(v.get('ae', '') or ''))
-        self.f_n.edit.setText(str(v.get('n', '') or ''))
-        self.f_fz.edit.setText(str(o.get('fz', '') or '').replace('.', ','))
-        self.f_vf.edit.clear()
+        self.f_n.saisir(str(v.get('n', '') or ''))
+        self.f_fz.saisir(str(o.get('fz', '') or '').replace('.', ','))
+        self.f_vf.effacer()
         self.mode = 'avance'
         for c, b in self.btn_modes.items():
             b.setChecked(c == 'avance')
@@ -941,7 +982,7 @@ class Fenetre(QMainWindow):
         # passant à l'acier n'aurait aucun sens.
         self.mat = mid
         for f in (self.f_n, self.f_fz, self.f_vf):
-            f.edit.clear()
+            f.effacer()
         for b in self.grp_mat.buttons():
             b.setChecked(b.text() == C.matiere(mid)['label'])
         self.recalculer()
@@ -949,7 +990,7 @@ class Fenetre(QMainWindow):
     def choisir_mode(self, cle):
         self.mode = cle
         for f in (self.f_n, self.f_fz, self.f_vf):
-            f.edit.clear()
+            f.effacer()
         for c, b in self.btn_modes.items():
             b.setChecked(c == cle)
         self.recalculer()
@@ -987,7 +1028,7 @@ class Fenetre(QMainWindow):
     def recalculer(self):
         r = C.calculer(
             mat=self.mat, d=self.f_d.valeur(), z=self.f_z.valeur(), mode=self.mode,
-            n=self.f_n.valeur(), fz=self.f_fz.valeur(), vf=self.f_vf.valeur(),
+            n=self.f_n.saisi, fz=self.f_fz.saisi, vf=self.f_vf.saisi,
             ae=self.f_ae.valeur(),
             m_min=self.f_min.valeur(), m_max=self.f_max.valeur(),
             plunge=self.f_plunge.valeur(), vf_max=self.f_vfmax.valeur())
@@ -997,20 +1038,22 @@ class Fenetre(QMainWindow):
         fz_calc = (self.mode == 'copeau')
         vf_calc = (self.mode == 'avance')
 
-        # Le champ déduit affiche le résultat ; les champs saisis gardent la
-        # valeur brute, jamais formatée — on recopierait des espaces.
+        # Le champ déduit affiche le résultat formaté. Un champ NON saisi
+        # affiche ce que le noyau a réellement pris à sa place — brut, jamais
+        # formaté (on recopierait des espaces) — et non un « conseillé »
+        # recalculé à part : en mode broche avec une largeur ae, le champ Vf
+        # disait 6 300 quand la carte disait 11 397, l'amincissement en moins.
+        fz_court = ('%.3f' % r['fz']).rstrip('0').rstrip('.').replace('.', ',')
         if n_calc:
             self.f_n.poser(C.fmt(r['n']))
-        elif not self.f_n.valeur():
-            self.f_n.poser(str(int(r['rec_n'])))
-        if fz_calc:
-            self.f_fz.poser(('%.3f' % r['fz']).rstrip('0').rstrip('.').replace('.', ','))
-        elif not self.f_fz.valeur():
-            self.f_fz.poser(str(r['rec_fz']).replace('.', ','))
+        elif not self.f_n.saisi:
+            self.f_n.poser(str(int(round(r['n']))))
+        if fz_calc or not self.f_fz.saisi:
+            self.f_fz.poser(fz_court)
         if vf_calc:
             self.f_vf.poser(C.fmt(r['vf']))
-        elif not self.f_vf.valeur():
-            self.f_vf.poser(str(int(round(r['rec_n'] * r['z'] * r['rec_fz']))))
+        elif not self.f_vf.saisi:
+            self.f_vf.poser(str(int(round(r['vf']))))
 
         for champ, calc in ((self.f_n, n_calc), (self.f_fz, fz_calc), (self.f_vf, vf_calc)):
             champ.marquer_calcule(calc)
@@ -1096,7 +1139,7 @@ class Fenetre(QMainWindow):
                C.fmt(C.num(self.f_max.valeur(), 24000)),
                C.fmt(C.num(self.f_vfmax.valeur(), 1500)),
                C.fmt(C.num(self.f_plunge.valeur(), 35))))
-        self._sauver_reglages()
+        self._minuterie_sauvegarde.start()
 
     # ------------------------------------------------------- bibliothèque
     def enregistrer_outil(self):
@@ -1150,8 +1193,8 @@ class Fenetre(QMainWindow):
         self.mat = o.get('mat', 'bois-tendre')
         self.f_d.edit.setText(str(o.get('d', '6')))
         self.f_z.edit.setText(str(o.get('z', '2')))
-        self.f_n.edit.setText(str(o.get('n', '')))
-        self.f_fz.edit.setText(str(o.get('fz', '')).replace('.', ','))
+        self.f_n.saisir(str(o.get('n', '') or ''))
+        self.f_fz.saisir(str(o.get('fz', '') or '').replace('.', ','))
         # `ae` fait partie de l'outil : sans lui, un outil enregistré en
         # reprise de contour se rouvrirait avec l'avance de la pleine largeur.
         self.f_ae.edit.setText(str(o.get('ae', '') or ''))
@@ -1167,7 +1210,7 @@ class Fenetre(QMainWindow):
             b.setChecked(i == self.forme)
         for i, b in self.btn_helices.items():
             b.setChecked(i == self.helice)
-        self.f_vf.edit.clear()
+        self.f_vf.effacer()
         self.mode = 'avance'
         for c, b in self.btn_modes.items():
             b.setChecked(c == 'avance')
@@ -1215,9 +1258,10 @@ class Fenetre(QMainWindow):
             return
         QMessageBox.information(
             self, APP_NOM,
-            "%d outil(s) écrits dans :\n%s\n\nDans FreeCAD : Macro → "
-            "macro_tool_controller.py, qui lira ce fichier et posera les cinq "
-            "vitesses sur le Tool Controller du Job."
+            "%d outil(s) écrits dans :\n%s\n\nCe fichier sert à l'ancienne macro, "
+            "macro_tool_controller.py, qui remplit un Tool Controller existant. "
+            "Le bouton de l'atelier CAM, lui, n'en a pas besoin : "
+            "« ↑ Écrire dans FreeCAD… » suffit."
             % (len(self.bibliotheque), chemin))
 
     def _exporter_fctb(self):
@@ -1248,8 +1292,8 @@ class Fenetre(QMainWindow):
             self, APP_NOM,
             "Écrit : %s\n\nUn .fctb ne peut pas porter de vitesses : il décrit la "
             "fraise. Les cinq valeurs ci-dessous vont dans le Tool Controller du "
-            "Job — ou bien lancez la macro macro_tool_controller.py, qui les pose "
-            "toute seule à partir de la bibliothèque exportée.\n\n"
+            "Job — ou bien « ↑ Écrire dans FreeCAD… » puis le bouton de l'atelier "
+            "CAM, qui les pose tout seul.\n\n"
             "  SpindleSpeed = %s\n  HorizFeed  = %s mm/min\n  VertFeed   = %s mm/min\n"
             "  HorizRapid = %s mm/min\n  VertRapid  = %s mm/min"
             % (Path(chemin).name, o.get('n'), o.get('vf'), o.get('plunge'),
@@ -1288,6 +1332,12 @@ class Fenetre(QMainWindow):
         self.bibliotheque = d.get('bibliotheque') or []
         self.dossier_fc = d.get('dossier_freecad') or ''
         self._rendre_biblio()
+
+    def closeEvent(self, evenement):
+        if self._minuterie_sauvegarde.isActive():
+            self._minuterie_sauvegarde.stop()
+            self._sauver_reglages()
+        super().closeEvent(evenement)
 
     # ------------------------------------------------------------ thème
     def _appliquer_theme(self):
