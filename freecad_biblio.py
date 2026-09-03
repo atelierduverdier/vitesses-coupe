@@ -193,18 +193,40 @@ def _nom_de_fichier(nom):
     return (propre or 'outil') + '.fctb'
 
 
+def _nom_libre(bit, nom_fichier, nom_outil):
+    """Le nom sous lequel écrire, sans écraser un AUTRE outil.
+
+    `_nom_de_fichier` ramène « Essai · Ø6,35 » et « Essai - Ø6.35 » au même
+    `Essai_6_35.fctb`, et un outil nommé « 5mm Endmill » tomberait sur la
+    fraise d'origine de FreeCAD. Un fichier qui existe déjà n'est donc
+    réécrit que s'il porte le MÊME nom d'outil — c'est alors une mise à
+    jour ; sinon on numérote : `_2`, `_3`…
+    """
+    racine = nom_fichier[:-len('.fctb')]
+    candidat, rang = nom_fichier, 1
+    while (bit / candidat).is_file():
+        existant = _lire_json(bit / candidat) or {}
+        if existant.get('name') == nom_outil:
+            return candidat
+        rang += 1
+        candidat = '%s_%d.fctb' % (racine, rang)
+    return candidat
+
+
 def ecrire_outil(dossier, fichier_outil_json, bibliotheque=None, vitesses=None):
     """Écrit un `.fctb` et l'inscrit dans une bibliothèque.
 
-    Rend le nom du fichier écrit. Si `bibliotheque` est donnée, l'outil est
-    ajouté à son `.fctl` — c'est ce qui le fait apparaître dans le
-    Gestionnaire de bibliothèque de FreeCAD. `vitesses` est retenu à côté,
-    puisque le fichier d'outil ne sait pas les garder.
+    Rend le nom du fichier écrit — qui peut être numéroté si un autre outil
+    occupait déjà ce nom, cf. `_nom_libre`. Si `bibliotheque` est donnée,
+    l'outil est ajouté à son `.fctl` — c'est ce qui le fait apparaître dans
+    le Gestionnaire de bibliothèque de FreeCAD. `vitesses` est retenu à
+    côté, puisque le fichier d'outil ne sait pas les garder.
     """
     dossier = Path(dossier)
     bit = dossier / 'Bit'
     bit.mkdir(parents=True, exist_ok=True)
-    nom_fichier = _nom_de_fichier(fichier_outil_json.get('name', 'outil'))
+    nom_outil = fichier_outil_json.get('name', 'outil')
+    nom_fichier = _nom_libre(bit, _nom_de_fichier(nom_outil), nom_outil)
     (bit / nom_fichier).write_text(
         json.dumps(fichier_outil_json, ensure_ascii=False, indent=2) + '\n',
         encoding='utf-8')
@@ -215,7 +237,10 @@ def ecrire_outil(dossier, fichier_outil_json, bibliotheque=None, vitesses=None):
         outils = d.get('tools') or []
         # Un même fichier ne s'inscrit pas deux fois : on met à jour.
         if not any(t.get('path') == nom_fichier for t in outils):
-            numeros = [t.get('nr', 0) for t in outils]
+            # Un `nr` absent ou nul ne doit pas faire tomber `max`.
+            numeros = [t.get('nr') for t in outils
+                       if isinstance(t.get('nr'), (int, float))
+                       and not isinstance(t.get('nr'), bool)]
             outils.append({'nr': (max(numeros) + 1) if numeros else 1,
                            'path': nom_fichier})
             d['tools'] = outils
